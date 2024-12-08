@@ -1,5 +1,7 @@
 package sparx64
 
+import "crypto/cipher"
+
 // Constants based on VERSION
 const (
 	_N_STEPS          = 8
@@ -185,3 +187,17 @@ func (s *Sparx64) Decrypt(dst, src []byte) {
 	dst[6] = byte(x[3] >> 8)
 	dst[7] = byte(x[3])
 }
+
+func (s *Sparx64) BlockSize() int {
+	return 8
+}
+
+func (s *Sparx64) Destroy() {
+	for i := range s.subkeys {
+		for j := range s.subkeys[i] {
+			s.subkeys[i][j] = 0
+		}
+	}
+}
+
+var _ cipher.Block = (*Sparx64)(nil)

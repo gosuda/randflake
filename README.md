@@ -1,3 +1,5 @@
-# randflake
+# Randflake ID
 
-RandFlake ID: internally ordered but externally indistinguishable from random numbers.
+Randflake ID: the distributed, unpredictable, unique random ID generator.
+
+More about Randflake ID: [https://gosuda.org/randflake](https://gosuda.org/randflake)
