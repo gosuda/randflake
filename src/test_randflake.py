@@ -188,6 +188,16 @@ class TestRandflake(unittest.TestCase):
         self.assertEqual(timestamp2, now)
         self.assertEqual(node_id2, node_id)
         self.assertEqual(counter2, counter)
+        
+        secret = "dffd6021bb2bd5b0af676290809ec3a5"
+        secret_bytes = bytes.fromhex(secret)
+        g = Generator(1, time.time(), time.time() + 3600, secret_bytes)
+
+        id = 4594531474933654033
+        timestamp, node_id, counter = g.inspect(id)
+        self.assertEqual(timestamp, 1733706297)
+        self.assertEqual(node_id, 42)
+        self.assertEqual(counter, 1)
 
 if __name__ == '__main__':
     unittest.main()
