@@ -1,6 +1,6 @@
 import time
 import struct
-from typing import Callable, Optional, Tuple
+from typing import Tuple
 from .sparx64 import Sparx64
 
 # Constants

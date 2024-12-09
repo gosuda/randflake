@@ -10,8 +10,6 @@ from .randflake import (
     ErrInvalidSecret,
     ErrInvalidLease,
     ErrInvalidNode,
-    ErrResourceExhausted,
-    ErrConsistencyViolation,
 )
 
 
