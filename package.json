@@ -1,0 +1,36 @@
+{
+  "name": "randflake-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Distributed unique ID generator with encryption",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "vitest",
+    "build": "npm run build -ws",
+    "bench": "vitest bench",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.0",
+    "@typescript-eslint/eslint-plugin": "^6.7.3",
+    "@typescript-eslint/parser": "^6.7.3",
+    "eslint": "^8.50.0",
+    "typescript": "^5.2.2",
+    "vitest": "^0.34.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gosuda/randflake.git"
+  },
+  "keywords": [
+    "id-generator",
+    "distributed",
+    "unique-id",
+    "randflake",
+    "monorepo"
+  ],
+  "author": "gosuda",
+  "license": "MIT"
+}

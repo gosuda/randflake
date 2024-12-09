@@ -1,0 +1,42 @@
+{
+  "name": "sparx64",
+  "version": "1.0.0",
+  "description": "TypeScript implementation of SPARX-64/128 block cipher",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest",
+    "bench": "vitest bench",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "typescript": "^5.2.2",
+    "vitest": "^0.34.6"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gosuda/randflake.git"
+  },
+  "keywords": [
+    "block-cipher",
+    "sparx",
+    "encryption",
+    "cryptography"
+  ],
+  "author": "gosuda",
+  "license": "MIT"
+}
