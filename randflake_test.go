@@ -140,13 +140,15 @@ func TestGenerator_UpdateLease(t *testing.T) {
 
 func TestGenerator_Generate(t *testing.T) {
 	secret := make([]byte, 16)
-	leaseStart := int64(RANDFLAKE_EPOCH_OFFSET + 1)
-	leaseEnd := int64(RANDFLAKE_EPOCH_OFFSET + 3600)
+	vtime := time.Now().Unix
+	leaseStart := vtime() - 1
+	leaseEnd := vtime() + 3600
 
 	g, err := NewGenerator(1, leaseStart, leaseEnd, secret)
 	if err != nil {
 		t.Fatalf("Failed to create generator: %v", err)
 	}
+	g.TimeSource = vtime
 
 	// Test ID generation and uniqueness
 	seen := make(map[int64]bool)
