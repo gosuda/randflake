@@ -26,3 +26,4 @@ go.work.sum
 __pycache__
 venv
 dist
+.pytest_cache
