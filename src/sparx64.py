@@ -3,21 +3,27 @@ _ROUNDS_PER_STEPS = 3
 _N_BRANCHES = 2
 _K_SIZE = 4
 
+
 # Custom error classes
 class SparxError(Exception):
     """Base class for sparx64 errors"""
+
     pass
+
 
 class ErrInvalidKey(SparxError):
     def __init__(self):
         super().__init__("sparx64: key must be 16 bytes (128 bits)")
 
+
 class ErrInvalidBuffer(SparxError):
     def __init__(self):
         super().__init__("sparx64: src must be 8 bytes (64 bits)")
 
+
 def _rotl(x, n):
     return ((x << n) | (x >> (16 - n))) & 0xFFFF
+
 
 def _A(l, r):
     l = _rotl(l, 9)
@@ -26,12 +32,14 @@ def _A(l, r):
     r ^= l
     return l, r
 
+
 def _A_inv(l, r):
     r ^= l
     r = _rotl(r, 14)
     l = (l - r) & 0xFFFF
     l = _rotl(l, 7)
     return l, r
+
 
 def _L_2(x):
     tmp = _rotl(x[0] ^ x[1], 8)
@@ -40,12 +48,14 @@ def _L_2(x):
     x[0], x[2] = x[2], x[0]
     x[1], x[3] = x[3], x[1]
 
+
 def _L_2_inv(x):
     x[0], x[2] = x[2], x[0]
     x[1], x[3] = x[3], x[1]
     tmp = _rotl(x[0] ^ x[1], 8)
     x[2] ^= x[0] ^ tmp
     x[3] ^= x[1] ^ tmp
+
 
 def _K_perm_64_128(k, c):
     k[0], k[1] = _A(k[0], k[1])
@@ -57,12 +67,17 @@ def _K_perm_64_128(k, c):
         k[i] = k[i - 2]
     k[0], k[1] = tmp0, tmp1
 
+
 def _key_schedule(master_key):
-    subkeys = [[0 for _ in range(2 * _ROUNDS_PER_STEPS)] for _ in range(_N_BRANCHES * _N_STEPS + 1)]
+    subkeys = [
+        [0 for _ in range(2 * _ROUNDS_PER_STEPS)]
+        for _ in range(_N_BRANCHES * _N_STEPS + 1)
+    ]
     for c in range(_N_BRANCHES * _N_STEPS + 1):
-        subkeys[c][:2 * _ROUNDS_PER_STEPS] = master_key[:2 * _ROUNDS_PER_STEPS]
+        subkeys[c][: 2 * _ROUNDS_PER_STEPS] = master_key[: 2 * _ROUNDS_PER_STEPS]
         _K_perm_64_128(master_key, c + 1)
     return subkeys
+
 
 def _sparx_encrypt(x, k):
     for s in range(_N_STEPS):
@@ -76,6 +91,7 @@ def _sparx_encrypt(x, k):
         x[2 * b] ^= k[_N_BRANCHES * _N_STEPS][2 * b]
         x[2 * b + 1] ^= k[_N_BRANCHES * _N_STEPS][2 * b + 1]
 
+
 def _sparx_decrypt(x, k):
     for b in range(_N_BRANCHES):
         x[2 * b] ^= k[_N_BRANCHES * _N_STEPS][2 * b]
@@ -87,6 +103,7 @@ def _sparx_decrypt(x, k):
                 x[2 * b], x[2 * b + 1] = _A_inv(x[2 * b], x[2 * b + 1])
                 x[2 * b] ^= k[_N_BRANCHES * s + b][2 * r]
                 x[2 * b + 1] ^= k[_N_BRANCHES * s + b][2 * r + 1]
+
 
 class Sparx64:
     def __init__(self, key):

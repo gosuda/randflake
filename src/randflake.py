@@ -8,42 +8,59 @@ RANDFLAKE_EPOCH_OFFSET = 1730000000  # Sunday, October 27, 2024 3:33:20 AM UTC
 
 # Bits allocation
 RANDFLAKE_TIMESTAMP_BITS = 30  # 30 bits for timestamp (lifetime of 34 years)
-RANDFLAKE_NODE_BITS = 17      # 17 bits for node id (max 131072 nodes)
-RANDFLAKE_SEQUENCE_BITS = 17   # 17 bits for sequence (max 131072 sequences)
+RANDFLAKE_NODE_BITS = 17  # 17 bits for node id (max 131072 nodes)
+RANDFLAKE_SEQUENCE_BITS = 17  # 17 bits for sequence (max 131072 sequences)
 
 # Derived constants
 RANDFLAKE_MAX_TIMESTAMP = RANDFLAKE_EPOCH_OFFSET + (1 << RANDFLAKE_TIMESTAMP_BITS) - 1
 RANDFLAKE_MAX_NODE = (1 << RANDFLAKE_NODE_BITS) - 1
 RANDFLAKE_MAX_SEQUENCE = (1 << RANDFLAKE_SEQUENCE_BITS) - 1
 
+
 # Custom error classes
 class RandflakeError(Exception):
     """Base class for randflake errors"""
+
     pass
+
 
 class ErrRandflakeDead(RandflakeError):
     def __init__(self):
-        super().__init__("randflake: the randflake id is dead after 34 years of lifetime")
+        super().__init__(
+            "randflake: the randflake id is dead after 34 years of lifetime"
+        )
+
 
 class ErrInvalidSecret(RandflakeError):
     def __init__(self):
         super().__init__("randflake: invalid secret, secret must be 16 bytes long")
 
+
 class ErrInvalidLease(RandflakeError):
     def __init__(self):
         super().__init__("randflake: invalid lease, lease expired or not started yet")
 
+
 class ErrInvalidNode(RandflakeError):
     def __init__(self):
-        super().__init__("randflake: invalid node id, node id must be between 0 and 131071")
+        super().__init__(
+            "randflake: invalid node id, node id must be between 0 and 131071"
+        )
+
 
 class ErrResourceExhausted(RandflakeError):
     def __init__(self):
-        super().__init__("randflake: resource exhausted (generator can't handle current throughput, try using multiple randflake instances)")
+        super().__init__(
+            "randflake: resource exhausted (generator can't handle current throughput, try using multiple randflake instances)"
+        )
+
 
 class ErrConsistencyViolation(RandflakeError):
     def __init__(self):
-        super().__init__("randflake: timestamp consistency violation, the current time is less than the last time")
+        super().__init__(
+            "randflake: timestamp consistency violation, the current time is less than the last time"
+        )
+
 
 class Generator:
     def __init__(self, node_id: int, lease_start: int, lease_end: int, secret: bytes):
@@ -104,27 +121,31 @@ class Generator:
                     raise ErrResourceExhausted()
 
             timestamp = now - RANDFLAKE_EPOCH_OFFSET
-            return ((timestamp << (RANDFLAKE_NODE_BITS + RANDFLAKE_SEQUENCE_BITS)) |
-                   (self.node_id << RANDFLAKE_SEQUENCE_BITS) |
-                   self.sequence)
+            return (
+                (timestamp << (RANDFLAKE_NODE_BITS + RANDFLAKE_SEQUENCE_BITS))
+                | (self.node_id << RANDFLAKE_SEQUENCE_BITS)
+                | self.sequence
+            )
 
     def generate(self) -> int:
         id_raw = self._new_raw()
-        src = struct.pack('<q', id_raw)
+        src = struct.pack("<q", id_raw)
         dst = bytearray(8)  # Use bytearray for dst
         self.sbox.encrypt(dst, src)
-        return struct.unpack('<q', dst)[0]
+        return struct.unpack("<q", dst)[0]
 
     def inspect(self, id_val: int) -> Tuple[int, int, int]:
-        src = struct.pack('<q', id_val)
+        src = struct.pack("<q", id_val)
         dst = bytearray(8)  # Use bytearray for dst
         self.sbox.decrypt(dst, src)
-        id_raw = struct.unpack('<q', dst)[0]
+        id_raw = struct.unpack("<q", dst)[0]
 
         if id_raw < 0:
             raise ErrInvalidLease()
 
-        timestamp = (id_raw >> (RANDFLAKE_NODE_BITS + RANDFLAKE_SEQUENCE_BITS)) + RANDFLAKE_EPOCH_OFFSET
+        timestamp = (
+            id_raw >> (RANDFLAKE_NODE_BITS + RANDFLAKE_SEQUENCE_BITS)
+        ) + RANDFLAKE_EPOCH_OFFSET
         node_id = (id_raw >> RANDFLAKE_SEQUENCE_BITS) & RANDFLAKE_MAX_NODE
         sequence = id_raw & RANDFLAKE_MAX_SEQUENCE
 

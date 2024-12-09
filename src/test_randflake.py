@@ -11,8 +11,9 @@ from .randflake import (
     ErrInvalidLease,
     ErrInvalidNode,
     ErrResourceExhausted,
-    ErrConsistencyViolation
+    ErrConsistencyViolation,
 )
+
 
 class TestRandflake(unittest.TestCase):
     def test_new_generator(self):
@@ -23,7 +24,7 @@ class TestRandflake(unittest.TestCase):
                 "lease_start": RANDFLAKE_EPOCH_OFFSET + 1,
                 "lease_end": RANDFLAKE_EPOCH_OFFSET + 3600,
                 "secret": bytes(16),
-                "want_error": None
+                "want_error": None,
             },
             {
                 "name": "invalid node ID - negative",
@@ -31,7 +32,7 @@ class TestRandflake(unittest.TestCase):
                 "lease_start": RANDFLAKE_EPOCH_OFFSET + 1,
                 "lease_end": RANDFLAKE_EPOCH_OFFSET + 3600,
                 "secret": bytes(16),
-                "want_error": ErrInvalidNode
+                "want_error": ErrInvalidNode,
             },
             {
                 "name": "invalid node ID - too large",
@@ -39,7 +40,7 @@ class TestRandflake(unittest.TestCase):
                 "lease_start": RANDFLAKE_EPOCH_OFFSET + 1,
                 "lease_end": RANDFLAKE_EPOCH_OFFSET + 3600,
                 "secret": bytes(16),
-                "want_error": ErrInvalidNode
+                "want_error": ErrInvalidNode,
             },
             {
                 "name": "invalid lease - end before start",
@@ -47,7 +48,7 @@ class TestRandflake(unittest.TestCase):
                 "lease_start": RANDFLAKE_EPOCH_OFFSET + 3600,
                 "lease_end": RANDFLAKE_EPOCH_OFFSET + 1,
                 "secret": bytes(16),
-                "want_error": ErrInvalidLease
+                "want_error": ErrInvalidLease,
             },
             {
                 "name": "invalid lease - end after max timestamp",
@@ -55,7 +56,7 @@ class TestRandflake(unittest.TestCase):
                 "lease_start": RANDFLAKE_EPOCH_OFFSET + 1,
                 "lease_end": RANDFLAKE_MAX_TIMESTAMP + 1,
                 "secret": bytes(16),
-                "want_error": ErrRandflakeDead
+                "want_error": ErrRandflakeDead,
             },
             {
                 "name": "invalid secret length",
@@ -63,20 +64,30 @@ class TestRandflake(unittest.TestCase):
                 "lease_start": RANDFLAKE_EPOCH_OFFSET + 1,
                 "lease_end": RANDFLAKE_EPOCH_OFFSET + 3600,
                 "secret": bytes(15),
-                "want_error": ErrInvalidSecret
-            }
+                "want_error": ErrInvalidSecret,
+            },
         ]
 
         for tc in test_cases:
             with self.subTest(name=tc["name"]):
                 if tc["want_error"] is None:
                     try:
-                        Generator(tc["node_id"], tc["lease_start"], tc["lease_end"], tc["secret"])
+                        Generator(
+                            tc["node_id"],
+                            tc["lease_start"],
+                            tc["lease_end"],
+                            tc["secret"],
+                        )
                     except Exception as e:
                         self.fail(f"Unexpected error: {e}")
                 else:
                     with self.assertRaises(tc["want_error"]):
-                        Generator(tc["node_id"], tc["lease_start"], tc["lease_end"], tc["secret"])
+                        Generator(
+                            tc["node_id"],
+                            tc["lease_start"],
+                            tc["lease_end"],
+                            tc["secret"],
+                        )
 
     def test_update_lease(self):
         secret = bytes(16)
@@ -90,26 +101,26 @@ class TestRandflake(unittest.TestCase):
                 "name": "valid update",
                 "lease_start": lease_start,
                 "lease_end": lease_end + 3600,
-                "want": True
+                "want": True,
             },
             {
                 "name": "invalid start time",
                 "lease_start": lease_start + 1,
                 "lease_end": lease_end + 7200,
-                "want": False
+                "want": False,
             },
             {
                 "name": "end before start",
                 "lease_start": lease_start,
                 "lease_end": lease_start - 1,
-                "want": False
+                "want": False,
             },
             {
                 "name": "end after max timestamp",
                 "lease_start": lease_start,
                 "lease_end": RANDFLAKE_MAX_TIMESTAMP + 1,
-                "want": False
-            }
+                "want": False,
+            },
         ]
 
         for tc in test_cases:
@@ -144,7 +155,7 @@ class TestRandflake(unittest.TestCase):
                 "lease_start": now + 3600,
                 "lease_end": now + 7200,
                 "time_source": lambda: now,
-                "want_error": ErrInvalidLease
+                "want_error": ErrInvalidLease,
             },
             {
                 "name": "time after lease end",
@@ -152,8 +163,8 @@ class TestRandflake(unittest.TestCase):
                 "lease_start": now - 7200,
                 "lease_end": now - 3600,
                 "time_source": lambda: now,
-                "want_error": ErrInvalidLease
-            }
+                "want_error": ErrInvalidLease,
+            },
         ]
 
         for tc in test_cases:
@@ -174,7 +185,7 @@ class TestRandflake(unittest.TestCase):
             node_id,
             RANDFLAKE_EPOCH_OFFSET + 1,
             RANDFLAKE_EPOCH_OFFSET + timestamp + 3600,
-            secret
+            secret,
         )
 
         # Generate an ID
@@ -188,7 +199,7 @@ class TestRandflake(unittest.TestCase):
         self.assertEqual(timestamp2, now)
         self.assertEqual(node_id2, node_id)
         self.assertEqual(counter2, counter)
-        
+
         secret = "dffd6021bb2bd5b0af676290809ec3a5"
         secret_bytes = bytes.fromhex(secret)
         g = Generator(1, time.time(), time.time() + 3600, secret_bytes)
@@ -199,5 +210,6 @@ class TestRandflake(unittest.TestCase):
         self.assertEqual(node_id, 42)
         self.assertEqual(counter, 1)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
