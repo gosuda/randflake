@@ -4,7 +4,7 @@
   "private": true,
   "description": "Distributed unique ID generator with encryption",
   "workspaces": [
-    "packages/*"
+    "src/randflake-ts/*"
   ],
   "scripts": {
     "test": "vitest",

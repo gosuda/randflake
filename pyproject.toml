@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "randflake"
-version = "1.4.0"
+version = "1.5.0"
 description = "A Python implementation the Randflake ID: a distributed, uniform, unpredictable, unique random ID generator."
 authors = [
     {name = "GoSuda"}
@@ -27,13 +27,10 @@ classifiers = [
 
 [project.urls]
 Repository = "https://github.com/gosuda/randflake"
+Issues = "https://github.com/gosuda/randflake/issues"
+Homepage = "https://gosuda.org/randflake"
 
-[tool.setuptools]
-package-dir = {"" = "src"}
+[tool]
 
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.pytest.ini_options]
-testpaths = ["src"]
-python_files = ["*_test.py", "test_*.py"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/randflake"]
