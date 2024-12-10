@@ -1,7 +1,0 @@
-LICENSE
-README.md
-pyproject.toml
-src/randflake.egg-info/PKG-INFO
-src/randflake.egg-info/SOURCES.txt
-src/randflake.egg-info/dependency_links.txt
-src/randflake.egg-info/top_level.txt
