@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   Generator,
   RANDFLAKE_EPOCH_OFFSET,
@@ -8,13 +8,13 @@ import {
   ErrInvalidLease,
   ErrRandflakeDead,
   ErrInvalidSecret,
-} from './index';
+} from "./index";
 
-describe('Generator', () => {
-  describe('constructor', () => {
+describe("Generator", () => {
+  describe("constructor", () => {
     const tests = [
       {
-        name: 'valid generator',
+        name: "valid generator",
         nodeID: 1,
         leaseStart: RANDFLAKE_EPOCH_OFFSET + 1,
         leaseEnd: RANDFLAKE_EPOCH_OFFSET + 3600,
@@ -22,7 +22,7 @@ describe('Generator', () => {
         wantErr: null,
       },
       {
-        name: 'invalid node ID - negative',
+        name: "invalid node ID - negative",
         nodeID: -1,
         leaseStart: RANDFLAKE_EPOCH_OFFSET + 1,
         leaseEnd: RANDFLAKE_EPOCH_OFFSET + 3600,
@@ -30,7 +30,7 @@ describe('Generator', () => {
         wantErr: ErrInvalidNode,
       },
       {
-        name: 'invalid node ID - too large',
+        name: "invalid node ID - too large",
         nodeID: RANDFLAKE_MAX_NODE + 1,
         leaseStart: RANDFLAKE_EPOCH_OFFSET + 1,
         leaseEnd: RANDFLAKE_EPOCH_OFFSET + 3600,
@@ -38,7 +38,7 @@ describe('Generator', () => {
         wantErr: ErrInvalidNode,
       },
       {
-        name: 'invalid lease - end before start',
+        name: "invalid lease - end before start",
         nodeID: 1,
         leaseStart: RANDFLAKE_EPOCH_OFFSET + 3600,
         leaseEnd: RANDFLAKE_EPOCH_OFFSET + 1,
@@ -46,7 +46,7 @@ describe('Generator', () => {
         wantErr: ErrInvalidLease,
       },
       {
-        name: 'invalid lease - start before epoch',
+        name: "invalid lease - start before epoch",
         nodeID: 1,
         leaseStart: RANDFLAKE_EPOCH_OFFSET - 1,
         leaseEnd: RANDFLAKE_EPOCH_OFFSET + 3600,
@@ -54,7 +54,7 @@ describe('Generator', () => {
         wantErr: ErrInvalidLease,
       },
       {
-        name: 'invalid lease - end after max timestamp',
+        name: "invalid lease - end after max timestamp",
         nodeID: 1,
         leaseStart: RANDFLAKE_EPOCH_OFFSET + 1,
         leaseEnd: RANDFLAKE_MAX_TIMESTAMP + 1,
@@ -62,7 +62,7 @@ describe('Generator', () => {
         wantErr: ErrRandflakeDead,
       },
       {
-        name: 'invalid secret length',
+        name: "invalid secret length",
         nodeID: 1,
         leaseStart: RANDFLAKE_EPOCH_OFFSET + 1,
         leaseEnd: RANDFLAKE_EPOCH_OFFSET + 3600,
@@ -74,17 +74,19 @@ describe('Generator', () => {
     tests.forEach(({ name, nodeID, leaseStart, leaseEnd, secret, wantErr }) => {
       it(name, () => {
         if (wantErr) {
-          expect(() => new Generator(nodeID, leaseStart, leaseEnd, secret))
-            .toThrow(wantErr);
+          expect(
+            () => new Generator(nodeID, leaseStart, leaseEnd, secret)
+          ).toThrow(wantErr);
         } else {
-          expect(() => new Generator(nodeID, leaseStart, leaseEnd, secret))
-            .not.toThrow();
+          expect(
+            () => new Generator(nodeID, leaseStart, leaseEnd, secret)
+          ).not.toThrow();
         }
       });
     });
   });
 
-  describe('updateLease', () => {
+  describe("updateLease", () => {
     const secret = new Uint8Array(16);
     const leaseStart = RANDFLAKE_EPOCH_OFFSET + 1;
     const leaseEnd = RANDFLAKE_EPOCH_OFFSET + 3600;
@@ -96,25 +98,25 @@ describe('Generator', () => {
 
     const tests = [
       {
-        name: 'valid update',
+        name: "valid update",
         leaseStart,
         leaseEnd: leaseEnd + 3600,
         want: true,
       },
       {
-        name: 'invalid start time',
+        name: "invalid start time",
         leaseStart: leaseStart + 1,
         leaseEnd: leaseEnd + 7200,
         want: false,
       },
       {
-        name: 'end before start',
+        name: "end before start",
         leaseStart,
         leaseEnd: leaseStart - 1,
         want: false,
       },
       {
-        name: 'end after max timestamp',
+        name: "end after max timestamp",
         leaseStart,
         leaseEnd: RANDFLAKE_MAX_TIMESTAMP + 1,
         want: false,
@@ -128,14 +130,17 @@ describe('Generator', () => {
     });
   });
 
-  describe('generate', () => {
-    it('generates unique IDs', () => {
+  describe("generate", () => {
+    it("generates unique IDs", () => {
       const secret = new Uint8Array(16);
-      const now = Math.floor(Date.now() / 1000);
-      const leaseStart = now - 1;
-      const leaseEnd = now + 3600;
+      const now = RANDFLAKE_EPOCH_OFFSET + 1000; // Fixed time within lease period
+      const leaseStart = RANDFLAKE_EPOCH_OFFSET + 1;
+      const leaseEnd = RANDFLAKE_EPOCH_OFFSET + 3600;
 
       const generator = new Generator(1, leaseStart, leaseEnd, secret);
+      // @ts-expect-error accessing private field for testing
+      generator.timeSource = () => now;
+      
       const seen = new Set<bigint>();
 
       for (let i = 0; i < 1000; i++) {
@@ -145,22 +150,22 @@ describe('Generator', () => {
       }
     });
 
-    it('throws error when time is before lease start', () => {
+    it("throws error when time is before lease start", () => {
       const secret = new Uint8Array(16);
       const now = Math.floor(Date.now() / 1000);
       const generator = new Generator(1, now + 3600, now + 7200, secret);
-      
+
       // @ts-expect-error accessing private field for testing
       generator.timeSource = () => now;
 
       expect(() => generator.generate()).toThrow(ErrInvalidLease);
     });
 
-    it('throws error when time is after lease end', () => {
+    it("throws error when time is after lease end", () => {
       const secret = new Uint8Array(16);
       const now = Math.floor(Date.now() / 1000);
       const generator = new Generator(1, now - 7200, now - 3600, secret);
-      
+
       // @ts-expect-error accessing private field for testing
       generator.timeSource = () => now;
 
@@ -168,29 +173,66 @@ describe('Generator', () => {
     });
   });
 
-  describe('inspect', () => {
-    it('correctly inspects generated ID', () => {
+  describe("inspect", () => {
+    it("correctly inspects generated ID", () => {
       const secret = new Uint8Array(16);
       crypto.getRandomValues(secret);
 
-      const timestamp = 1234528n;
-      const nodeID = 1n;
-      const sequence = 12345n;
-      const raw = (timestamp << 34n) | (nodeID << 17n) | sequence;
+      const timestamp = 1234528;
+      const nodeID = 1;
+      const sequence = 12345;
+      const now = RANDFLAKE_EPOCH_OFFSET + timestamp;
 
       const generator = new Generator(
-        Number(nodeID),
-        Number(timestamp) + RANDFLAKE_EPOCH_OFFSET - 3600,
-        Number(timestamp) + RANDFLAKE_EPOCH_OFFSET + 3600,
+        nodeID,
+        RANDFLAKE_EPOCH_OFFSET + 1,
+        RANDFLAKE_EPOCH_OFFSET + timestamp + 3600,
         secret
       );
 
-      const [timestamp2, nodeID2, sequence2] = generator.inspect(raw);
+      // Set up the generator with fixed values
+      // @ts-expect-error accessing private field for testing
+      generator.sequence = sequence - 1;
+      // @ts-expect-error accessing private field for testing
+      generator.timeSource = () => now;
 
-      expect(timestamp2).toBe(RANDFLAKE_EPOCH_OFFSET+Number(timestamp));
-      expect(nodeID2).toBe(Number(nodeID));
-      expect(sequence2).toBe(Number(sequence));
-      expect(sequence2).toBe(Number(sequence));
+      // Generate an encrypted ID
+      const id = generator.generate();
+      
+      // Inspect the encrypted ID
+      const [timestamp2, nodeID2, sequence2] = generator.inspect(id);
+      
+      // Verify exact values
+      expect(timestamp2).toBe(now);
+      expect(nodeID2).toBe(nodeID);
+      expect(sequence2).toBe(sequence);
+    });
+
+    it("compatible with go implementation", () => {
+      // Use the exact same secret as Go test
+      const secretStr = "dffd6021bb2bd5b0af676290809ec3a5";
+      const secret = new Uint8Array(16);
+      for (let i = 0; i < 16; i++) {
+        secret[i] = parseInt(secretStr.slice(i * 2, i * 2 + 2), 16);
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const generator = new Generator(
+        42,  // Use the expected nodeID
+        now,
+        now + 3600,
+        secret
+      );
+
+      // The test ID from Go implementation
+      const id = 4594531474933654033n;
+
+      // Inspect the ID
+      const [timestamp, nodeID, sequence] = generator.inspect(id);
+      
+      expect(timestamp).toBe(1733706297);
+      expect(nodeID).toBe(42);
+      expect(sequence).toBe(1);
     });
   });
 });

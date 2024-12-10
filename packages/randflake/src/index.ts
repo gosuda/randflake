@@ -160,7 +160,8 @@ export class Generator {
     const dst = new Uint8Array(8);
     this.sbox.encrypt(dst, src);
     
-    return view.getBigInt64(0, true);
+    const dstView = new DataView(dst.buffer);
+    return dstView.getBigInt64(0, true);
   }
 
   inspect(idVal: bigint): [number, number, number] {
@@ -171,7 +172,8 @@ export class Generator {
     const dst = new Uint8Array(8);
     this.sbox.decrypt(dst, src);
     
-    const idRaw = view.getBigInt64(0, true);
+    const dstView = new DataView(dst.buffer);
+    const idRaw = dstView.getBigInt64(0, true);
 
     if (idRaw < 0) {
       throw new ErrInvalidLease();

@@ -15,7 +15,8 @@ Randflake ID is a distributed, uniform, unpredictable, and unique random ID gene
 
 - 🌐 **Multi-Language Support**: Available in Go, Python, and TypeScript/JavaScript
 - 🔒 **Cryptographically Secure**: Generates unpredictable and unique identifiers
-- 🚀 **High Performance**: Optimized for low-latency ID generation
+- 🚀 **High-Performance ID Generation**: Optimized for lock-free operation to minimize latency and maximize throughput
+- 📈 **Scalable**: Engineered to handle high-throughput systems with a maximum ID generation rate of 17,179,869,184 ID/s
 - 🔀 **Distributed-Friendly**: Suitable for distributed systems and microservices
 - 📊 **Uniform Distribution**: Ensures even spread of generated IDs
 
@@ -23,7 +24,7 @@ Randflake ID is a distributed, uniform, unpredictable, and unique random ID gene
 
 ### Go
 ```bash
-go get gosuda.org/randflake
+go get -u gosuda.org/randflake
 ```
 
 ### Python
@@ -44,31 +45,63 @@ package main
 
 import (
     "fmt"
+    "time"
+
     "gosuda.org/randflake"
 )
 
 func main() {
-    id := randflake.New()
+    now := time.Now().Unix()
+
+    nodeid := int64(42)
+    lease_start := int64(now)
+    lease_end := int64(now + 600)
+    secret := []byte("super-secret-key")
+
+    g, err := randflake.NewGenerator(nodeid, lease_start, lease_end, secret)
+    if err != nil {
+        panic(err)
+    }
+
+    id, err := g.Generate()
+    if err != nil {
+        panic(err)
+    }
     fmt.Println(id)
 }
 ```
 
 ### Python
 ```python
-from randflake import Randflake
+from randflake import Generator
 
-id_generator = Randflake()
-unique_id = id_generator.generate()
-print(unique_id)
+now = int(time.time())
+
+nodeid = 42
+lease_start = now
+lease_end = now + 600
+secret = b'super-secret-key'
+
+g = Generator(nodeid, lease_start, lease_end, secret)
+
+uid = g.generate()
+print(uid)
 ```
 
 ### TypeScript/JavaScript
 ```typescript
-import { Randflake } from 'randflake';
+import { Generator } from 'randflake';
 
-const idGenerator = new Randflake();
-const uniqueId = idGenerator.generate();
-console.log(uniqueId);
+const now = Math.floor(Date.now() / 1000);
+
+const nodeid = 42;
+const lease_start = now;
+const lease_end = now + 600;
+const secret = new TextEncoder().encode('super-secret-key');
+
+const generator = new Generator(nodeid, lease_start, lease_end, secret);
+const uid = generator.generate();
+console.log(uid);
 ```
 
 ## Performance
