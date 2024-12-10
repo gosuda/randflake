@@ -1,6 +1,6 @@
 {
   "name": "sparx64",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "TypeScript implementation of SPARX-64/128 block cipher",
   "type": "module",
   "main": "./dist/index.js",

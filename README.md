@@ -73,6 +73,7 @@ func main() {
 
 ### Python
 ```python
+import time
 from randflake import Generator
 
 now = int(time.time())

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "randflake"
-version = "1.5.0"
+version = "1.5.1"
 description = "A Python implementation the Randflake ID: a distributed, uniform, unpredictable, unique random ID generator."
 authors = [
     {name = "GoSuda"}
