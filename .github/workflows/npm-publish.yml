@@ -16,6 +16,6 @@ jobs:
       - run: cd src/randflake-ts/sparx64 && npm publish && cd ../../
         env:
           NODE_AUTH_TOKEN: ${{secrets.npm_token}}
-      - run: cd src/randflake-ts/randflake && npm publish && cd ../../
+      - run: cd src/randflake-ts/randflake && npm i && npm publish && cd ../../
         env:
           NODE_AUTH_TOKEN: ${{secrets.npm_token}}
