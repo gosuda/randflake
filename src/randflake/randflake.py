@@ -62,6 +62,32 @@ class ErrConsistencyViolation(RandflakeError):
         )
 
 
+class ErrInvalidID(RandflakeError):
+    def __init__(self):
+        super().__init__("randflake: invalid id")
+
+
+_base32hexchars = "0123456789abcdefghijklmnopqrstuv"
+
+
+def _encodeB32hex(n):
+    if n < 0:
+        n += 1 << 64
+
+    if n == 0:
+        return "0"
+
+    result = ""
+    while n > 0:
+        result = base32hexchars[n & 0x1F] + result
+        n = n // 32
+    return result
+
+
+def _decodeB32hex(s):
+    return int(s, 32)
+
+
 class Generator:
     def __init__(self, node_id: int, lease_start: int, lease_end: int, secret: bytes):
         if lease_end < lease_start:
@@ -134,6 +160,10 @@ class Generator:
         self.sbox.encrypt(dst, src)
         return struct.unpack("<q", dst)[0]
 
+    def generate_string(self) -> str:
+        _id = self.generate()
+        return _encodeB32hex(_id)
+
     def inspect(self, id_val: int) -> Tuple[int, int, int]:
         src = struct.pack("<q", id_val)
         dst = bytearray(8)  # Use bytearray for dst
@@ -150,3 +180,7 @@ class Generator:
         sequence = id_raw & RANDFLAKE_MAX_SEQUENCE
 
         return timestamp, node_id, sequence
+
+    def inspect_string(self, id_str: str) -> Tuple[int, int, int]:
+        id_val = _decodeB32hex(id_str)
+        return self.inspect(id_val)

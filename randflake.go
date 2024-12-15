@@ -35,6 +35,7 @@ var (
 	ErrInvalidNode          = errors.New("randflake: invalid node id, node id must be between 0 and 131071")
 	ErrResourceExhausted    = errors.New("randflake: resource exhausted (generator can't handle current throughput, try using multiple randflake instances)")
 	ErrConsistencyViolation = errors.New("randflake: timestamp consistency violation, the current time is less than the last time")
+	ErrInvalidID            = errors.New("randflake: invalid id")
 )
 
 type Generator struct {
@@ -176,6 +177,15 @@ func (g *Generator) Generate() (int64, error) {
 	return int64(binary.LittleEndian.Uint64(b[:])), nil
 }
 
+// GenerateString generates a unique, encrypted ID and returns it as a string.
+func (g *Generator) GenerateString() (string, error) {
+	id, err := g.Generate()
+	if err != nil {
+		return "", err
+	}
+	return base32hexencode(uint64(id)), nil
+}
+
 // Inspect returns the timestamp, node ID, and sequence number of the given ID.
 func (g *Generator) Inspect(id int64) (timestamp int64, nodeID int64, sequence int64, err error) {
 	var b [8]byte
@@ -189,4 +199,64 @@ func (g *Generator) Inspect(id int64) (timestamp int64, nodeID int64, sequence i
 	nodeID = (id >> RANDFLAKE_SEQUENCE_BITS) & RANDFLAKE_MAX_NODE
 	sequence = id & RANDFLAKE_MAX_SEQUENCE
 	return
+}
+
+// InspectString returns the timestamp, node ID, and sequence number of the given ID.
+func (g *Generator) InspectString(id string) (timestamp int64, nodeID int64, sequence int64, err error) {
+	num, err := base32hexdecode(id)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	return g.Inspect(int64(num))
+}
+
+const b32hexchars = "0123456789abcdefghijklmnopqrstuv"
+
+func base32hexencode(num uint64) string {
+	if num == 0 {
+		return "0"
+	}
+
+	var encoded [13]byte
+	idx := 12
+	for num > 0 {
+		encoded[idx] = b32hexchars[num&0x1f]
+		num >>= 5
+		idx--
+	}
+
+	return string(encoded[idx+1:])
+}
+
+func base32hexdecode(s string) (uint64, error) {
+	var num uint64
+	for _, c := range s {
+		if c == '=' {
+			break
+		}
+
+		num <<= 5
+		if c >= '0' && c <= '9' {
+			num += uint64(c - '0')
+		} else if c >= 'a' && c <= 'v' {
+			num += uint64(c - 'a' + 10)
+		} else if c >= 'A' && c <= 'V' {
+			num += uint64(c - 'A' + 10)
+		} else {
+			return 0, ErrInvalidID
+		}
+	}
+	return num, nil
+}
+
+func EncodeString(id int64) string {
+	return base32hexencode(uint64(id))
+}
+
+func DecodeString(s string) (int64, error) {
+	id, err := base32hexdecode(s)
+	if err != nil {
+		return 0, err
+	}
+	return int64(id), nil
 }

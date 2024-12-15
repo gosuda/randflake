@@ -202,8 +202,14 @@ class TestRandflake(unittest.TestCase):
         secret_bytes = bytes.fromhex(secret)
         g = Generator(1, time.time(), time.time() + 3600, secret_bytes)
 
-        id = 4594531474933654033
-        timestamp, node_id, counter = g.inspect(id)
+        _id = 4594531474933654033
+        timestamp, node_id, counter = g.inspect(_id)
+        self.assertEqual(timestamp, 1733706297)
+        self.assertEqual(node_id, 42)
+        self.assertEqual(counter, 1)
+
+        _id_str = "3vgoe12ccb8gh"
+        timestamp, node_id, counter = g.inspect_string(_id_str)
         self.assertEqual(timestamp, 1733706297)
         self.assertEqual(node_id, 42)
         self.assertEqual(counter, 1)

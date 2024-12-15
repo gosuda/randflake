@@ -109,6 +109,36 @@ console.log(uid);
 
 Randflake ID is designed for high-performance scenarios, with minimal overhead in ID generation.
 
+## String Representation
+
+Randflake ID is encoded as a base32hex string.
+
+```python
+base32hexchars = "0123456789abcdefghijklmnopqrstuv"
+
+original = 4594531474933654033
+encoded = "3vgoe12ccb8gh"
+
+def decode(s):
+    return int(s, 32)
+
+def encode(n):
+    if n < 0:
+        n += 1 << 64
+    
+    if n == 0:
+        return "0"
+    
+    result = ""
+    while n > 0:
+        result = base32hexchars[n&0x1f] + result
+        n = n // 32
+    return result
+
+assert original == decode(encode(original))
+assert encode(original) == "3vgoe12ccb8gh"
+```
+
 ## Contributing
 
 Contributions are welcome! Please follow these steps:

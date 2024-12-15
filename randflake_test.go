@@ -3,6 +3,9 @@ package randflake
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/hex"
+	"math"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -277,5 +280,147 @@ func TestGenerator_Inspect(t *testing.T) {
 
 	if counter2 != counter {
 		t.Errorf("Expected counter %d, got %d", counter, counter2)
+	}
+}
+
+func TestBase32HexEncode(t *testing.T) {
+	tests := []uint64{
+		0,
+		1,
+		10,
+		100,
+		1000,
+		10000,
+		100000,
+		1000000,
+		10000000,
+		100000000,
+		1000000000,
+		10000000000,
+		100000000000,
+		1000000000000,
+		10000000000000,
+		100000000000000,
+		1000000000000000,
+		10000000000000000,
+		100000000000000000,
+		1000000000000000000,
+		math.MaxUint64,
+		math.MaxInt64,
+	}
+
+	for i := range tests {
+		enc1 := strconv.FormatUint(tests[i], 32)
+		enc2 := base32hexencode(tests[i])
+		if enc1 != enc2 {
+			t.Errorf("Expected %s, got %s", enc1, enc2)
+			t.Fail()
+			return
+		}
+	}
+}
+
+func TestBase32HexDecode(t *testing.T) {
+	tests := []uint64{
+		0,
+		1,
+		10,
+		100,
+		1000,
+		10000,
+		100000,
+		1000000,
+		10000000,
+		100000000,
+		1000000000,
+		10000000000,
+		100000000000,
+		1000000000000,
+		10000000000000,
+		100000000000000,
+		1000000000000000,
+		10000000000000000,
+		100000000000000000,
+		1000000000000000000,
+		math.MaxUint64,
+		math.MaxInt64,
+	}
+
+	for i := range tests {
+		dec1, err := strconv.ParseUint(base32hexencode(tests[i]), 32, 64)
+		if err != nil {
+			t.Errorf("Error decoding %d: %v", tests[i], err)
+			t.Fail()
+			return
+		}
+		dec2, err := base32hexdecode(base32hexencode(tests[i]))
+		if err != nil {
+			t.Errorf("Error decoding %d: %v", tests[i], err)
+			t.Fail()
+			return
+		}
+		if dec1 != dec2 {
+			t.Errorf("Expected %d, got %d", dec1, dec2)
+			t.Fail()
+			return
+		}
+	}
+}
+
+func TestInspectString(t *testing.T) {
+	keyString := "dffd6021bb2bd5b0af676290809ec3a5"
+	encoded := "3vgoe12ccb8gh"
+
+	key, err := hex.DecodeString(keyString)
+	if err != nil {
+		t.Fatalf("Failed to decode key: %v", err)
+	}
+
+	id, err := DecodeString(encoded)
+	if err != nil {
+		t.Fatalf("Failed to decode ID: %v", err)
+	}
+
+	if id != 4594531474933654033 {
+		t.Errorf("Expected ID 4594531474933654033, got %d", id)
+	}
+
+	g, err := NewGenerator(1, time.Now().Unix(), time.Now().Unix()+3600, key)
+	if err != nil {
+		t.Fatalf("Failed to create generator: %v", err)
+	}
+
+	timestamp0, nodeID0, counter0, err := g.Inspect(int64(id))
+	if err != nil {
+		t.Fatalf("Failed to inspect ID: %v", err)
+	}
+
+	if timestamp0 != 1733706297 {
+		t.Errorf("Expected timestamp 1733706297, got %d", timestamp0)
+	}
+
+	if nodeID0 != 42 {
+		t.Errorf("Expected node ID 42, got %d", nodeID0)
+	}
+
+	if counter0 != 1 {
+		t.Errorf("Expected counter 1, got %d", counter0)
+	}
+
+	timestamp1, nodeID1, counter1, err := g.InspectString(encoded)
+	if err != nil {
+		t.Fatalf("Failed to inspect ID: %v", err)
+	}
+
+	if timestamp1 != 1733706297 {
+		t.Errorf("Expected timestamp 1733706297, got %d", timestamp1)
+	}
+
+	if nodeID1 != 42 {
+		t.Errorf("Expected node ID 42, got %d", nodeID1)
+	}
+
+	if counter1 != 1 {
+		t.Errorf("Expected counter 1, got %d", counter1)
 	}
 }
