@@ -424,3 +424,29 @@ func TestInspectString(t *testing.T) {
 		t.Errorf("Expected counter 1, got %d", counter1)
 	}
 }
+
+func TestGenerator_GetLeaseInfo(t *testing.T) {
+	nodeID := int64(42)
+	leaseStart := int64(1730000000)
+	leaseEnd := int64(1730003600)
+	secret := make([]byte, 16)
+
+	g, err := NewGenerator(nodeID, leaseStart, leaseEnd, secret)
+	if err != nil {
+		t.Fatalf("Failed to create generator: %v", err)
+	}
+
+	info := g.GetLeaseInfo()
+
+	if info.NodeID != nodeID {
+		t.Errorf("Expected NodeID %d, got %d", nodeID, info.NodeID)
+	}
+
+	if info.LeaseStart != leaseStart {
+		t.Errorf("Expected LeaseStart %d, got %d", leaseStart, info.LeaseStart)
+	}
+
+	if info.LeaseEnd != leaseEnd {
+		t.Errorf("Expected LeaseEnd %d, got %d", leaseEnd, info.LeaseEnd)
+	}
+}

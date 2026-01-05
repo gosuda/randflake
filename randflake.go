@@ -120,6 +120,22 @@ func (g *Generator) UpdateLease(leaseStart, leaseEnd int64) bool {
 	return false
 }
 
+// LeaseInfo represents the lease configuration of a randflake generator.
+type LeaseInfo struct {
+	NodeID     int64
+	LeaseStart int64
+	LeaseEnd   int64
+}
+
+// GetLeaseInfo returns the current lease information of the generator.
+func (g *Generator) GetLeaseInfo() LeaseInfo {
+	return LeaseInfo{
+		NodeID:     g.nodeID,
+		LeaseStart: g.leaseStart,
+		LeaseEnd:   g.leaseEnd.Load(),
+	}
+}
+
 func (g *Generator) newRAW() (int64, error) {
 	for {
 		var now int64

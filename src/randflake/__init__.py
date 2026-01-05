@@ -1,5 +1,6 @@
 from .randflake import (
     Generator,
+    LeaseInfo,
     ErrRandflakeDead,
     ErrInvalidSecret,
     ErrInvalidLease,
@@ -17,6 +18,7 @@ from .sparx64 import Sparx64, ErrInvalidKey, ErrInvalidBuffer
 __all__ = [
     # Randflake
     "Generator",
+    "LeaseInfo",
     "ErrRandflakeDead",
     "ErrInvalidSecret",
     "ErrInvalidLease",

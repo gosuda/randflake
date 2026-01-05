@@ -1,5 +1,6 @@
 import time
 import struct
+from dataclasses import dataclass
 from typing import Tuple
 from .sparx64 import Sparx64
 
@@ -79,13 +80,20 @@ def _encodeB32hex(n):
 
     result = ""
     while n > 0:
-        result = base32hexchars[n & 0x1F] + result
+        result = _base32hexchars[n & 0x1F] + result
         n = n // 32
     return result
 
 
 def _decodeB32hex(s):
     return int(s, 32)
+
+
+@dataclass
+class LeaseInfo:
+    node_id: int
+    lease_start: int
+    lease_end: int
 
 
 class Generator:
@@ -125,6 +133,13 @@ class Generator:
             return True
 
         return False
+
+    def get_lease_info(self) -> LeaseInfo:
+        return LeaseInfo(
+            node_id=self.node_id,
+            lease_start=self.lease_start,
+            lease_end=self.lease_end,
+        )
 
     def _new_raw(self) -> int:
         while True:

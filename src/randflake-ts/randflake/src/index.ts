@@ -57,6 +57,12 @@ export class ErrConsistencyViolation extends RandflakeError {
   }
 }
 
+export interface LeaseInfo {
+  nodeID: number;
+  leaseStart: number;
+  leaseEnd: number;
+}
+
 export class Generator {
   private leaseStart: number;
   private leaseEnd: number;
@@ -114,6 +120,14 @@ export class Generator {
     }
 
     return false;
+  }
+
+  getLeaseInfo(): LeaseInfo {
+    return {
+      nodeID: this.nodeID,
+      leaseStart: this.leaseStart,
+      leaseEnd: this.leaseEnd,
+    };
   }
 
   private newRAW(): bigint {
