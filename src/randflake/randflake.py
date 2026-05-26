@@ -121,6 +121,9 @@ class Generator:
         if not (0 <= node_id <= RANDFLAKE_MAX_NODE):
             raise ErrInvalidNode()
 
+        if lease_start < RANDFLAKE_EPOCH_OFFSET:
+            raise ErrInvalidLease()
+
         if lease_end > RANDFLAKE_MAX_TIMESTAMP:
             raise ErrRandflakeDead()
 

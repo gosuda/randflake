@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 import unittest
-import time
 import os
 from .randflake import (
     Generator,
@@ -52,6 +51,14 @@ class TestRandflake(unittest.TestCase):
                 "node_id": 1,
                 "lease_start": RANDFLAKE_EPOCH_OFFSET + 3600,
                 "lease_end": RANDFLAKE_EPOCH_OFFSET + 1,
+                "secret": bytes(16),
+                "want_error": ErrInvalidLease,
+            },
+            {
+                "name": "invalid lease - start before epoch",
+                "node_id": 1,
+                "lease_start": RANDFLAKE_EPOCH_OFFSET - 1,
+                "lease_end": RANDFLAKE_EPOCH_OFFSET + 3600,
                 "secret": bytes(16),
                 "want_error": ErrInvalidLease,
             },
@@ -165,8 +172,8 @@ class TestRandflake(unittest.TestCase):
             {
                 "name": "time after lease end",
                 "node_id": 1,
-                "lease_start": now - 7200,
-                "lease_end": now - 3600,
+                "lease_start": RANDFLAKE_EPOCH_OFFSET + 1,
+                "lease_end": now - 1,
                 "time_source": lambda: now,
                 "want_error": ErrInvalidLease,
             },
@@ -207,10 +214,16 @@ class TestRandflake(unittest.TestCase):
 
         secret = "dffd6021bb2bd5b0af676290809ec3a5"
         secret_bytes = bytes.fromhex(secret)
-        g = Generator(1, time.time(), time.time() + 3600, secret_bytes)
+        g = Generator(1, 1730000000, 1735000000, secret_bytes)
 
         _id = 4594531474933654033
         timestamp, node_id, counter = g.inspect(_id)
+        self.assertEqual(timestamp, 1733706297)
+        self.assertEqual(node_id, 42)
+        self.assertEqual(counter, 1)
+
+        _id_str = "3vgoe12ccb8gh"
+        timestamp, node_id, counter = g.inspect_string(_id_str)
         self.assertEqual(timestamp, 1733706297)
         self.assertEqual(node_id, 42)
         self.assertEqual(counter, 1)
@@ -290,12 +303,6 @@ class TestRandflake(unittest.TestCase):
             generator.rollover = vector["lease_start"]
         generator.time_source = lambda: vector["timestamp"]
         return generator
-
-        _id_str = "3vgoe12ccb8gh"
-        timestamp, node_id, counter = g.inspect_string(_id_str)
-        self.assertEqual(timestamp, 1733706297)
-        self.assertEqual(node_id, 42)
-        self.assertEqual(counter, 1)
 
 
 if __name__ == "__main__":

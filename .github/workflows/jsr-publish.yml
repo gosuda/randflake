@@ -1,0 +1,40 @@
+name: JSR Package Publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish-jsr:
+    name: Publish JSR packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install TypeScript dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Test TypeScript packages
+        run: npm test
+
+      - name: Build workspace dependency
+        run: npm run build --workspace sparx64
+
+      - name: Publish sparx64 to JSR
+        working-directory: src/randflake-ts/sparx64
+        run: npx jsr publish
+
+      - name: Publish randflake to JSR
+        working-directory: src/randflake-ts/randflake
+        run: npx jsr publish
