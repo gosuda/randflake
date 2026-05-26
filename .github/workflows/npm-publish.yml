@@ -13,9 +13,13 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org/
-      - run: cd src/randflake-ts/sparx64 && npm publish && cd ../../
+
+      - name: Install TypeScript dependencies
+        run: npm ci --no-audit --no-fund
+
+      - run: npm publish --workspace sparx64
         env:
           NODE_AUTH_TOKEN: ${{secrets.npm_token}}
-      - run: cd src/randflake-ts/randflake && npm i && npm publish && cd ../../
+      - run: npm publish --workspace randflake
         env:
           NODE_AUTH_TOKEN: ${{secrets.npm_token}}

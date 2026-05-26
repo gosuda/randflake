@@ -23,7 +23,7 @@ jobs:
           node-version: 24
 
       - name: Install TypeScript dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Test TypeScript packages
         run: npm test
@@ -33,8 +33,8 @@ jobs:
 
       - name: Publish sparx64 to JSR
         working-directory: src/randflake-ts/sparx64
-        run: npx jsr publish
+        run: npx --no-install jsr publish
 
       - name: Publish randflake to JSR
         working-directory: src/randflake-ts/randflake
-        run: npx jsr publish
+        run: npx --no-install jsr publish

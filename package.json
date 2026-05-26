@@ -14,12 +14,13 @@
     "lint": "eslint ."
   },
   "devDependencies": {
-    "@types/node": "^20.8.0",
-    "@typescript-eslint/eslint-plugin": "^6.7.3",
-    "@typescript-eslint/parser": "^6.7.3",
-    "eslint": "^8.50.0",
-    "typescript": "^5.2.2",
-    "vitest": "^0.34.6"
+    "@types/node": "^24.12.4",
+    "@typescript-eslint/eslint-plugin": "^8.60.0",
+    "@typescript-eslint/parser": "^8.60.0",
+    "eslint": "^10.4.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7",
+    "jsr": "^0.14.3"
   },
   "repository": {
     "type": "git",
