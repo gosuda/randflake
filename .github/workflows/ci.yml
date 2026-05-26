@@ -56,7 +56,7 @@ jobs:
           node-version: "24"
 
       - name: Install TypeScript dependencies
-        run: npm ci --no-audit --no-fund
+        run: npm ci
 
       - name: Build TypeScript
         run: npm run build
