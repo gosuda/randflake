@@ -1,6 +1,6 @@
 {
   "name": "randflake",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "TypeScript implementation of randflake ID generator",
   "type": "module",
   "main": "./dist/index.js",
@@ -13,7 +13,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest",
+    "test": "vitest run",
     "bench": "vitest bench",
     "prepublishOnly": "npm run build"
   },
@@ -21,7 +21,7 @@
     "dist"
   ],
   "dependencies": {
-    "sparx64": "^1.7.1"
+    "sparx64": "^1.7.2"
   },
   "devDependencies": {
     "typescript": "^5.2.2",

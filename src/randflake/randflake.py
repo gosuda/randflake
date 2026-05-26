@@ -86,7 +86,24 @@ def _encodeB32hex(n):
 
 
 def _decodeB32hex(s):
-    return int(s, 32)
+    n = 0
+    for c in s:
+        if c == "=":
+            break
+
+        n <<= 5
+        if "0" <= c <= "9":
+            n += ord(c) - ord("0")
+        elif "a" <= c <= "v":
+            n += ord(c) - ord("a") + 10
+        elif "A" <= c <= "V":
+            n += ord(c) - ord("A") + 10
+        else:
+            raise ErrInvalidID()
+
+    if n >= 1 << 63:
+        n -= 1 << 64
+    return n
 
 
 @dataclass

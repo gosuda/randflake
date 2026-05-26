@@ -57,6 +57,53 @@ export class ErrConsistencyViolation extends RandflakeError {
   }
 }
 
+export class ErrInvalidID extends RandflakeError {
+  constructor() {
+    super('randflake: invalid id');
+  }
+}
+
+const BASE32HEX_CHARS = '0123456789abcdefghijklmnopqrstuv';
+
+export function encodeString(id: bigint): string {
+  let num = BigInt.asUintN(64, id);
+  if (num === 0n) {
+    return '0';
+  }
+
+  let encoded = '';
+  while (num > 0n) {
+    encoded = BASE32HEX_CHARS[Number(num & 0x1fn)] + encoded;
+    num >>= 5n;
+  }
+
+  return encoded;
+}
+
+export function decodeString(id: string): bigint {
+  let num = 0n;
+
+  for (const c of id) {
+    if (c === '=') {
+      break;
+    }
+
+    const charCode = c.charCodeAt(0);
+    num <<= 5n;
+    if (charCode >= 48 && charCode <= 57) {
+      num += BigInt(charCode - 48);
+    } else if (charCode >= 97 && charCode <= 118) {
+      num += BigInt(charCode - 97 + 10);
+    } else if (charCode >= 65 && charCode <= 86) {
+      num += BigInt(charCode - 65 + 10);
+    } else {
+      throw new ErrInvalidID();
+    }
+  }
+
+  return BigInt.asIntN(64, num);
+}
+
 export interface LeaseInfo {
   nodeID: number;
   leaseStart: number;
@@ -178,6 +225,10 @@ export class Generator {
     return dstView.getBigInt64(0, true);
   }
 
+  generateString(): string {
+    return encodeString(this.generate());
+  }
+
   inspect(idVal: bigint): [number, number, number] {
     const src = new Uint8Array(8);
     const view = new DataView(src.buffer);
@@ -198,5 +249,9 @@ export class Generator {
     const sequence = Number(idRaw & BigInt(RANDFLAKE_MAX_SEQUENCE));
 
     return [timestamp, nodeID, sequence];
+  }
+
+  inspectString(id: string): [number, number, number] {
+    return this.inspect(decodeString(id));
   }
 }

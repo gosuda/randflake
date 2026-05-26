@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 import unittest
 import time
 import os
@@ -6,11 +8,16 @@ from .randflake import (
     RANDFLAKE_EPOCH_OFFSET,
     RANDFLAKE_MAX_TIMESTAMP,
     RANDFLAKE_MAX_NODE,
+    RANDFLAKE_MAX_SEQUENCE,
     ErrRandflakeDead,
     ErrInvalidSecret,
     ErrInvalidLease,
     ErrInvalidNode,
+    _decodeB32hex,
 )
+
+
+TEST_VECTOR_PATH = Path(__file__).resolve().parents[2] / "test_vectors.json"
 
 
 class TestRandflake(unittest.TestCase):
@@ -207,6 +214,82 @@ class TestRandflake(unittest.TestCase):
         self.assertEqual(timestamp, 1733706297)
         self.assertEqual(node_id, 42)
         self.assertEqual(counter, 1)
+
+    def test_cross_language_test_vectors(self):
+        with TEST_VECTOR_PATH.open(encoding="utf-8") as f:
+            vectors = json.load(f)
+
+        self.assertGreaterEqual(len(vectors), 10)
+
+        for vector in vectors:
+            with self.subTest(
+                secret=vector["secret"],
+                timestamp=vector["timestamp"],
+                node_id=vector["node_id"],
+                sequence=vector["sequence"],
+            ):
+                secret = bytes.fromhex(vector["secret"])
+                encrypted_id = int(vector["encrypted_id"])
+
+                generator = Generator(
+                    vector["node_id"],
+                    vector["lease_start"],
+                    vector["lease_end"],
+                    secret,
+                )
+
+                timestamp, node_id, sequence = generator.inspect(encrypted_id)
+                self.assertEqual(timestamp, vector["timestamp"])
+                self.assertEqual(node_id, vector["node_id"])
+                self.assertEqual(sequence, vector["sequence"])
+
+                decoded_id = _decodeB32hex(vector["encoded_id"])
+                self.assertEqual(decoded_id, encrypted_id)
+
+                timestamp, node_id, sequence = generator.inspect_string(
+                    vector["encoded_id"]
+                )
+                self.assertEqual(timestamp, vector["timestamp"])
+                self.assertEqual(node_id, vector["node_id"])
+                self.assertEqual(sequence, vector["sequence"])
+
+                raw_id = (
+                    (
+                        vector["timestamp"] - RANDFLAKE_EPOCH_OFFSET
+                    )
+                    << (17 + 17)
+                ) | (vector["node_id"] << 17) | vector["sequence"]
+                self.assertEqual(str(raw_id), vector["raw_id"])
+
+                generated = self._generate_vector_id(vector, secret)
+                self.assertEqual(generated, encrypted_id)
+
+                generated_string = self._generate_vector_string(vector, secret)
+                self.assertEqual(generated_string, vector["encoded_id"])
+
+    def _generate_vector_id(self, vector, secret):
+        generator = self._generator_at_vector_state(vector, secret)
+        return generator.generate()
+
+    def _generate_vector_string(self, vector, secret):
+        generator = self._generator_at_vector_state(vector, secret)
+        return generator.generate_string()
+
+    def _generator_at_vector_state(self, vector, secret):
+        generator = Generator(
+            vector["node_id"],
+            vector["lease_start"],
+            vector["lease_end"],
+            secret,
+        )
+        if vector["sequence"] == 0:
+            generator.sequence = RANDFLAKE_MAX_SEQUENCE
+            generator.rollover = vector["timestamp"] - 1
+        else:
+            generator.sequence = vector["sequence"] - 1
+            generator.rollover = vector["lease_start"]
+        generator.time_source = lambda: vector["timestamp"]
+        return generator
 
         _id_str = "3vgoe12ccb8gh"
         timestamp, node_id, counter = g.inspect_string(_id_str)

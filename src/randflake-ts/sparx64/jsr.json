@@ -1,10 +1,10 @@
 {
-    "name": "@safe/sparx64",
-    "version": "1.7.1",
-    "exports": "./src/index.ts",
-    "publish": {
-      "include": [
-        "src/**/*.ts"
-      ]
-    }
+  "name": "@safe/sparx64",
+  "version": "1.7.2",
+  "exports": "./src/index.ts",
+  "publish": {
+    "include": [
+      "src/**/*.ts"
+    ]
   }
+}

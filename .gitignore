@@ -29,3 +29,12 @@ dist
 .pytest_cache
 node_modules
 .egg-info
+.omx/
+.codex/*
+!.codex/agents/
+!.codex/agents/**
+!.codex/skills/
+!.codex/skills/**
+.codex/skills/.system/**
+!.codex/prompts/
+!.codex/prompts/**

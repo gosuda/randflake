@@ -1,15 +1,16 @@
 {
   "name": "randflake-monorepo",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "private": true,
   "description": "Distributed unique ID generator with encryption",
   "workspaces": [
-    "src/randflake-ts/*"
+    "src/randflake-ts/sparx64",
+    "src/randflake-ts/randflake"
   ],
   "scripts": {
-    "test": "vitest",
-    "build": "npm run build -ws",
-    "bench": "vitest bench",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "bench": "npm run bench --workspaces --if-present",
     "lint": "eslint ."
   },
   "devDependencies": {

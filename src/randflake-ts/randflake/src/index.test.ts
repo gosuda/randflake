@@ -1,14 +1,68 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   Generator,
   RANDFLAKE_EPOCH_OFFSET,
   RANDFLAKE_MAX_NODE,
+  RANDFLAKE_MAX_SEQUENCE,
   RANDFLAKE_MAX_TIMESTAMP,
+  RANDFLAKE_NODE_BITS,
+  RANDFLAKE_SEQUENCE_BITS,
   ErrInvalidNode,
   ErrInvalidLease,
   ErrRandflakeDead,
   ErrInvalidSecret,
+  decodeString,
 } from "./index";
+
+interface TestVector {
+  secret: string;
+  node_id: number;
+  lease_start: number;
+  lease_end: number;
+  timestamp: number;
+  sequence: number;
+  raw_id: string;
+  encrypted_id: string;
+  encoded_id: string;
+}
+
+const testVectors = JSON.parse(
+  readFileSync(new URL("../../../../test_vectors.json", import.meta.url), "utf8")
+) as TestVector[];
+
+function secretFromHex(secret: string): Uint8Array {
+  const bytes = new Uint8Array(16);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(secret.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+function generatorAtVectorState(vector: TestVector): Generator {
+  const generator = new Generator(
+    vector.node_id,
+    vector.lease_start,
+    vector.lease_end,
+    secretFromHex(vector.secret)
+  );
+
+  if (vector.sequence === 0) {
+    // @ts-expect-error accessing private field for cross-language vector setup
+    generator.sequence = RANDFLAKE_MAX_SEQUENCE;
+    // @ts-expect-error accessing private field for cross-language vector setup
+    generator.rollover = vector.timestamp - 1;
+  } else {
+    // @ts-expect-error accessing private field for cross-language vector setup
+    generator.sequence = vector.sequence - 1;
+    // @ts-expect-error accessing private field for cross-language vector setup
+    generator.rollover = vector.lease_start;
+  }
+
+  // @ts-expect-error accessing private field for deterministic vector setup
+  generator.timeSource = () => vector.timestamp;
+  return generator;
+}
 
 describe("Generator", () => {
   describe("constructor", () => {
@@ -233,6 +287,49 @@ describe("Generator", () => {
       expect(timestamp).toBe(1733706297);
       expect(nodeID).toBe(42);
       expect(sequence).toBe(1);
+    });
+  });
+
+  describe("cross-language test vectors", () => {
+    it("loads a robust shared vector set", () => {
+      expect(testVectors.length).toBeGreaterThanOrEqual(10);
+    });
+
+    testVectors.forEach((vector, index) => {
+      it(`validates vector ${index + 1}`, () => {
+        const generator = new Generator(
+          vector.node_id,
+          vector.lease_start,
+          vector.lease_end,
+          secretFromHex(vector.secret)
+        );
+
+        const encryptedID = BigInt(vector.encrypted_id);
+        const [timestamp, nodeID, sequence] = generator.inspect(encryptedID);
+        expect(timestamp).toBe(vector.timestamp);
+        expect(nodeID).toBe(vector.node_id);
+        expect(sequence).toBe(vector.sequence);
+
+        expect(decodeString(vector.encoded_id)).toBe(encryptedID);
+
+        const [stringTimestamp, stringNodeID, stringSequence] =
+          generator.inspectString(vector.encoded_id);
+        expect(stringTimestamp).toBe(vector.timestamp);
+        expect(stringNodeID).toBe(vector.node_id);
+        expect(stringSequence).toBe(vector.sequence);
+
+        const rawID =
+          (BigInt(vector.timestamp - RANDFLAKE_EPOCH_OFFSET) <<
+            BigInt(RANDFLAKE_NODE_BITS + RANDFLAKE_SEQUENCE_BITS)) |
+          (BigInt(vector.node_id) << BigInt(RANDFLAKE_SEQUENCE_BITS)) |
+          BigInt(vector.sequence);
+        expect(rawID.toString()).toBe(vector.raw_id);
+
+        expect(generatorAtVectorState(vector).generate()).toBe(encryptedID);
+        expect(generatorAtVectorState(vector).generateString()).toBe(
+          vector.encoded_id
+        );
+      });
     });
   });
 });
