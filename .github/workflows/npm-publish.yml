@@ -15,7 +15,7 @@ jobs:
           registry-url: https://registry.npmjs.org/
 
       - name: Install TypeScript dependencies
-        run: npm ci
+        run: bash .github/scripts/npm-ci-with-logs.sh
 
       - run: npm publish --workspace sparx64
         env:

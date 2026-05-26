@@ -23,7 +23,7 @@ jobs:
           node-version: latest
 
       - name: Install TypeScript dependencies
-        run: npm ci
+        run: bash .github/scripts/npm-ci-with-logs.sh
 
       - name: Test TypeScript packages
         run: npm test
