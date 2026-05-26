@@ -18,7 +18,7 @@
     "@typescript-eslint/eslint-plugin": "^8.60.0",
     "@typescript-eslint/parser": "^8.60.0",
     "eslint": "^10.4.0",
-    "typescript": "^6.0.3",
+    "typescript": "^5.6.0",
     "vitest": "^4.1.7",
     "jsr": "^0.14.3"
   },
