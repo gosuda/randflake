@@ -1,6 +1,6 @@
 {
   "name": "@safe/randflake",
-  "version": "1.8.0",
+  "version": "2.1.0",
   "exports": {
     ".": "./src/index.ts",
     "./v2": "./src/v2.ts"

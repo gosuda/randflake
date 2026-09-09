@@ -1,370 +1,241 @@
-package randflake
+package randflake_test
 
 import (
-	"crypto/rand"
-	"encoding/binary"
-	"encoding/hex"
+	"errors"
+	"fmt"
 	"math"
+	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
-	"gosuda.org/randflake/sparx64"
+	randflake "gosuda.org/randflake/v2"
 )
 
-func TestNewGenerator(t *testing.T) {
-	tests := []struct {
-		name       string
-		nodeID     int64
-		leaseStart int64
-		leaseEnd   int64
-		secret     []byte
-		wantErr    error
-	}{
-		{
-			name:       "valid generator",
-			nodeID:     1,
-			leaseStart: RANDFLAKE_EPOCH_OFFSET + 1,
-			leaseEnd:   RANDFLAKE_EPOCH_OFFSET + 3600,
-			secret:     make([]byte, 16),
-			wantErr:    nil,
-		},
-		{
-			name:       "invalid node ID - negative",
-			nodeID:     -1,
-			leaseStart: RANDFLAKE_EPOCH_OFFSET + 1,
-			leaseEnd:   RANDFLAKE_EPOCH_OFFSET + 3600,
-			secret:     make([]byte, 16),
-			wantErr:    ErrInvalidNode,
-		},
-		{
-			name:       "invalid node ID - too large",
-			nodeID:     RANDFLAKE_MAX_NODE + 1,
-			leaseStart: RANDFLAKE_EPOCH_OFFSET + 1,
-			leaseEnd:   RANDFLAKE_EPOCH_OFFSET + 3600,
-			secret:     make([]byte, 16),
-			wantErr:    ErrInvalidNode,
-		},
-		{
-			name:       "invalid lease - end before start",
-			nodeID:     1,
-			leaseStart: RANDFLAKE_EPOCH_OFFSET + 3600,
-			leaseEnd:   RANDFLAKE_EPOCH_OFFSET + 1,
-			secret:     make([]byte, 16),
-			wantErr:    ErrInvalidLease,
-		},
-		{
-			name:       "invalid lease - start before epoch",
-			nodeID:     1,
-			leaseStart: RANDFLAKE_EPOCH_OFFSET - 1,
-			leaseEnd:   RANDFLAKE_EPOCH_OFFSET + 3600,
-			secret:     make([]byte, 16),
-			wantErr:    ErrInvalidLease,
-		},
-		{
-			name:       "invalid lease - end after max timestamp",
-			nodeID:     1,
-			leaseStart: RANDFLAKE_EPOCH_OFFSET + 1,
-			leaseEnd:   RANDFLAKE_MAX_TIMESTAMP + RANDFLAKE_EPOCH_OFFSET + 1,
-			secret:     make([]byte, 16),
-			wantErr:    ErrRandflakeDead,
-		},
-		{
-			name:       "invalid secret length",
-			nodeID:     1,
-			leaseStart: RANDFLAKE_EPOCH_OFFSET + 1,
-			leaseEnd:   RANDFLAKE_EPOCH_OFFSET + 3600,
-			secret:     make([]byte, 15),
-			wantErr:    ErrInvalidSecret,
-		},
-	}
+var errClockOffline = errors.New("clock offline")
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewGenerator(tt.nodeID, tt.leaseStart, tt.leaseEnd, tt.secret)
-			if err != tt.wantErr {
-				t.Errorf("NewGenerator() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+func newGenerator(t *testing.T, lease randflake.Lease, clock randflake.Clock) *randflake.Generator {
+	t.Helper()
+	g, err := randflake.New(randflake.Config{Lease: lease, Secret: make([]byte, 16), Clock: clock})
+	if err != nil {
+		t.Fatal(err)
 	}
+	return g
 }
 
-func TestGenerator_UpdateLease(t *testing.T) {
-	secret := make([]byte, 16)
-	leaseStart := int64(RANDFLAKE_EPOCH_OFFSET + 1)
-	leaseEnd := int64(RANDFLAKE_EPOCH_OFFSET + 3600)
-
-	g, err := NewGenerator(1, leaseStart, leaseEnd, secret)
-	if err != nil {
-		t.Fatalf("Failed to create generator: %v", err)
+func TestSequenceCapacityAndClockFailure(t *testing.T) {
+	const start randflake.UnixSeconds = 1770000000
+	now := start
+	clockErr := errClockOffline
+	g := newGenerator(t, randflake.Lease{NodeID: 42, Start: start, EndExclusive: start + 10}, func() (randflake.UnixSeconds, error) { return now, clockErr })
+	if _, err := g.Generate(); !errors.Is(err, errClockOffline) {
+		t.Fatalf("clock error = %v", err)
 	}
-
-	tests := []struct {
-		name       string
-		leaseStart int64
-		leaseEnd   int64
-		want       bool
-	}{
-		{
-			name:       "valid update",
-			leaseStart: leaseStart,
-			leaseEnd:   leaseEnd + 3600,
-			want:       true,
-		},
-		{
-			name:       "invalid start time",
-			leaseStart: leaseStart + 1,
-			leaseEnd:   leaseEnd + 7200,
-			want:       false,
-		},
-		{
-			name:       "end before start",
-			leaseStart: leaseStart,
-			leaseEnd:   leaseStart - 1,
-			want:       false,
-		},
-		{
-			name:       "end after max timestamp",
-			leaseStart: leaseStart,
-			leaseEnd:   RANDFLAKE_MAX_TIMESTAMP + RANDFLAKE_EPOCH_OFFSET + 1,
-			want:       false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := g.UpdateLease(tt.leaseStart, tt.leaseEnd); got != tt.want {
-				t.Errorf("Generator.UpdateLease() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGenerator_Generate(t *testing.T) {
-	secret := make([]byte, 16)
-	vtime := time.Now().Unix
-	leaseStart := vtime() - 1
-	leaseEnd := vtime() + 3600
-
-	g, err := NewGenerator(1, leaseStart, leaseEnd, secret)
-	if err != nil {
-		t.Fatalf("Failed to create generator: %v", err)
-	}
-	g.TimeSource = vtime
-
-	// Test ID generation and uniqueness
-	seen := make(map[int64]bool)
-	for i := 0; i < 1000; i++ {
+	clockErr = nil
+	var last int64
+	for sequence := range randflake.MaxSequence + 1 {
 		id, err := g.Generate()
 		if err != nil {
-			t.Fatalf("Failed to generate ID: %v", err)
+			t.Fatalf("sequence %d: %v", sequence, err)
 		}
-		if seen[id] {
-			t.Errorf("Generated duplicate ID: %d", id)
+		last = id
+		if sequence == 0 && g.Inspect(id).Sequence != 0 {
+			t.Fatal("clock failure consumed a sequence")
 		}
-		seen[id] = true
+	}
+	if got := g.Inspect(last).Sequence; got != randflake.MaxSequence {
+		t.Fatalf("last sequence = %d", got)
+	}
+	if _, err := g.Generate(); !errors.Is(err, randflake.ErrResourceExhausted) {
+		t.Fatalf("exhaustion = %v", err)
+	}
+	now++
+	id, err := g.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parts := g.Inspect(id); parts.Timestamp != now || parts.Sequence != 0 {
+		t.Fatalf("next second = %+v", parts)
+	}
+	now--
+	if _, err := g.Generate(); !errors.Is(err, randflake.ErrConsistencyViolation) {
+		t.Fatalf("rollback = %v", err)
 	}
 }
 
-func TestGenerator_GenerateErrors(t *testing.T) {
-	secret := make([]byte, 16)
-	now := time.Now().Unix()
-
-	tests := []struct {
-		name       string
-		nodeID     int64
-		leaseStart int64
-		leaseEnd   int64
-		timeSource func() int64
-		wantErr    error
-	}{
-		{
-			name:       "time before lease start",
-			nodeID:     1,
-			leaseStart: now + 3600,
-			leaseEnd:   now + 7200,
-			timeSource: func() int64 { return now },
-			wantErr:    ErrInvalidLease,
-		},
-		{
-			name:       "time after lease end",
-			nodeID:     1,
-			leaseStart: now - 7200,
-			leaseEnd:   now - 3600,
-			timeSource: func() int64 { return now },
-			wantErr:    ErrInvalidLease,
-		},
+func TestHalfOpenLeaseHandoffAndExtension(t *testing.T) {
+	const start randflake.UnixSeconds = 1770000000
+	now := start + 1
+	clock := func() (randflake.UnixSeconds, error) { return now, nil }
+	lease := randflake.Lease{NodeID: 42, Start: start, EndExclusive: start + 1}
+	old := newGenerator(t, lease, clock)
+	next := newGenerator(t, randflake.Lease{NodeID: 42, Start: start + 1, EndExclusive: start + 2}, clock)
+	if _, err := old.Generate(); !errors.Is(err, randflake.ErrInvalidLease) {
+		t.Fatalf("old owner at handoff: %v", err)
+	}
+	if _, err := next.Generate(); err != nil {
+		t.Fatalf("new owner at handoff: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g, err := NewGenerator(tt.nodeID, tt.leaseStart, tt.leaseEnd, secret)
-			if err != nil {
-				t.Fatalf("Failed to create generator: %v", err)
-			}
-			g.TimeSource = tt.timeSource
+	g := newGenerator(t, randflake.Lease{NodeID: 7, Start: start, EndExclusive: start + 2}, clock)
+	copy := g.Lease()
+	copy.EndExclusive = start + 100
+	now = start + 2
+	if _, err := g.Generate(); !errors.Is(err, randflake.ErrInvalidLease) {
+		t.Fatalf("snapshot mutation changed lease: %v", err)
+	}
+	if err := g.ExtendLease(randflake.Lease{NodeID: 7, Start: start, EndExclusive: start + 4}); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.ExtendLease(randflake.Lease{NodeID: 7, Start: start, EndExclusive: start + 3}); err != nil {
+		t.Fatalf("satisfied extension: %v", err)
+	}
+	now = start + 3
+	if _, err := g.Generate(); err != nil {
+		t.Fatalf("stale extension shortened lease: %v", err)
+	}
+	copy = g.Lease()
+	copy.NodeID++
+	if err := g.ExtendLease(copy); !errors.Is(err, randflake.ErrInvalidLease) {
+		t.Fatalf("wrong node: %v", err)
+	}
+	copy = g.Lease()
+	copy.Start++
+	if err := g.ExtendLease(copy); !errors.Is(err, randflake.ErrInvalidLease) {
+		t.Fatalf("wrong start: %v", err)
+	}
+}
 
-			_, err = g.Generate()
-			if err != tt.wantErr {
-				t.Errorf("Generator.Generate() error = %v, wantErr %v", err, tt.wantErr)
+func TestConcurrentExtensionsKeepGreatestEnd(t *testing.T) {
+	const start randflake.UnixSeconds = 1770000000
+	g := newGenerator(t, randflake.Lease{NodeID: 42, Start: start, EndExclusive: start + 1}, nil)
+	var wg sync.WaitGroup
+	for offset := range 32 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := g.ExtendLease(randflake.Lease{NodeID: 42, Start: start, EndExclusive: start + randflake.UnixSeconds(offset) + 2}); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	if got := g.Lease().EndExclusive; got != start+33 {
+		t.Fatalf("lease end = %d, want %d", got, start+33)
+	}
+}
+
+func TestConcurrentGenerationAcrossSeconds(t *testing.T) {
+	for _, advance := range []bool{false, true} {
+		t.Run(fmt.Sprintf("advance=%v", advance), func(t *testing.T) {
+			const start int64 = 1770000000
+			var now atomic.Int64
+			now.Store(start)
+			g := newGenerator(t, randflake.Lease{NodeID: 42, Start: randflake.UnixSeconds(start), EndExclusive: randflake.UnixSeconds(start + 1000)}, func() (randflake.UnixSeconds, error) { return randflake.UnixSeconds(now.Load()), nil })
+			const workers, count = 8, 1024
+			results := make([][]int64, workers)
+			var wg sync.WaitGroup
+			for worker := range workers {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					ids := make([]int64, 0, count)
+					for i := range count {
+						id, err := g.Generate()
+						if err != nil {
+							t.Error(err)
+							return
+						}
+						ids = append(ids, id)
+						if advance && i%64 == 63 {
+							now.Add(1)
+						}
+					}
+					results[worker] = ids
+				}()
+			}
+			wg.Wait()
+			seen := make(map[int64]struct{}, workers*count)
+			for _, ids := range results {
+				for _, id := range ids {
+					if _, exists := seen[id]; exists {
+						t.Fatalf("duplicate ID %d", id)
+					}
+					seen[id] = struct{}{}
+				}
+			}
+			if len(seen) != workers*count {
+				t.Fatalf("generated %d IDs, want %d", len(seen), workers*count)
 			}
 		})
 	}
 }
 
-func BenchmarkGenerator_GenerateParallel(b *testing.B) {
-	secret := make([]byte, 16)
-	now := time.Now().Unix()
-
-	var nodeid atomic.Int64
-
-	b.SetBytes(1)
-	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		var generators [32]*Generator
-		for i := 0; i < 32; i++ {
-			g, err := NewGenerator(nodeid.Add(1), now-3600, now+3600, secret)
-			if err != nil {
-				b.Fatalf("Failed to create generator: %v", err)
-			}
-			generators[i] = g
+func TestConcurrentNewerSecondResamplesStaleRead(t *testing.T) {
+	const start randflake.UnixSeconds = 1770000000
+	entered, release := make(chan struct{}), make(chan struct{})
+	var calls atomic.Int64
+	g := newGenerator(t, randflake.Lease{NodeID: 42, Start: start, EndExclusive: start + 10}, func() (randflake.UnixSeconds, error) {
+		if calls.Add(1) == 1 {
+			close(entered)
+			<-release
+			return start, nil
 		}
-		var cursor int
-
-		for pb.Next() {
-			_, err := generators[cursor].Generate()
-			if err != nil {
-				cursor = (cursor + 1) % 32
-				_, err := generators[cursor].Generate()
-				if err != nil {
-					b.Fatalf("Failed to generate ID: %v", err)
-				}
-			}
-		}
+		return start + 1, nil
 	})
-}
-
-func TestGenerator_Inspect(t *testing.T) {
-	secret := make([]byte, 16)
-	rand.Read(secret)
-	sbox := sparx64.NewSparx64(secret)
-
-	timestamp := int64(1234528)
-	nodeID := int64(1)
-	counter := int64(12345)
-	raw := timestamp<<34 | nodeID<<17 | counter
-
-	var b [8]byte
-	binary.LittleEndian.PutUint64(b[:], uint64(raw))
-	sbox.Encrypt(b[:], b[:])
-	id := int64(binary.LittleEndian.Uint64(b[:]))
-
-	g, err := NewGenerator(nodeID, RANDFLAKE_EPOCH_OFFSET+timestamp-3600, RANDFLAKE_EPOCH_OFFSET+timestamp+3600, secret)
-	if err != nil {
-		t.Fatalf("Failed to create generator: %v", err)
+	type result struct {
+		id  int64
+		err error
 	}
-
-	timestamp2, nodeID2, counter2, err := g.Inspect(id)
-	if err != nil {
-		t.Fatalf("Failed to inspect ID: %v", err)
+	done := make(chan result, 1)
+	go func() { id, err := g.Generate(); done <- result{id, err} }()
+	<-entered
+	first, err := g.Generate()
+	close(release)
+	second := <-done
+	if err != nil || second.err != nil {
+		t.Fatalf("concurrent generation errors: %v, %v", err, second.err)
 	}
-
-	if timestamp2 != timestamp+RANDFLAKE_EPOCH_OFFSET {
-		t.Errorf("Expected timestamp %d, got %d", timestamp+RANDFLAKE_EPOCH_OFFSET, timestamp2)
+	if first == second.id {
+		t.Fatal("concurrent allocations reused an ID")
 	}
-
-	if nodeID2 != nodeID {
-		t.Errorf("Expected node ID %d, got %d", nodeID, nodeID2)
-	}
-
-	if counter2 != counter {
-		t.Errorf("Expected counter %d, got %d", counter, counter2)
+	if parts := g.Inspect(second.id); parts.Timestamp != start+1 || parts.Sequence != 1 {
+		t.Fatalf("resampled allocation = %+v", parts)
 	}
 }
 
-func TestBase32HexEncode(t *testing.T) {
-	for _, tc := range []struct {
-		id   int64
-		text string
-	}{
-		{0, "0"}, {31, "v"}, {32, "10"},
-		{math.MaxInt64, "7vvvvvvvvvvvv"}, {math.MinInt64, "8000000000000"}, {-1, "fvvvvvvvvvvvv"},
+func TestLeaseConstructionBoundaries(t *testing.T) {
+	for _, lease := range []randflake.Lease{
+		{NodeID: 0, Start: randflake.Epoch, EndExclusive: randflake.Epoch},
+		{NodeID: 0, Start: randflake.Epoch - 1, EndExclusive: randflake.Epoch + 1},
+		{NodeID: 0, Start: randflake.Epoch, EndExclusive: randflake.MaxTimestamp + 2},
 	} {
-		if got := EncodeString(tc.id); got != tc.text {
-			t.Errorf("EncodeString(%d) = %q, want %q", tc.id, got, tc.text)
+		if _, err := randflake.New(randflake.Config{Lease: lease, Secret: make([]byte, 16)}); !errors.Is(err, randflake.ErrInvalidLease) {
+			t.Fatalf("lease %+v: %v", lease, err)
 		}
 	}
+	g := newGenerator(t, randflake.Lease{NodeID: randflake.MaxNodeID, Start: randflake.MaxTimestamp, EndExclusive: randflake.MaxTimestamp + 1}, func() (randflake.UnixSeconds, error) { return randflake.MaxTimestamp, nil })
+	id, err := g.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parts := g.Inspect(id); parts.Timestamp != randflake.MaxTimestamp || parts.NodeID != randflake.MaxNodeID {
+		t.Fatalf("maximum timestamp = %+v", parts)
+	}
 }
 
-func TestBase32HexDecode(t *testing.T) {
+func TestCanonicalDecodeRejectsAlternateSpellings(t *testing.T) {
+	for _, text := range []string{"", "00", "V", "1=ignored", "g000000000001", "10000000000000", "!"} {
+		if _, err := randflake.DecodeString(text); !errors.Is(err, randflake.ErrInvalidID) {
+			t.Errorf("DecodeString(%q) error = %v", text, err)
+		}
+	}
 	for _, tc := range []struct {
 		text string
 		id   int64
-	}{
-		{"0", 0}, {"V", 31}, {"10", 32}, {"8000000000000", math.MinInt64},
-		{"fvvvvvvvvvvvv", -1}, {"", 0}, {"1=ignored", 1}, {"g000000000001", 1},
-	} {
-		got, err := DecodeString(tc.text)
-		if err != nil || got != tc.id {
-			t.Errorf("DecodeString(%q) = %d, %v; want %d", tc.text, got, err, tc.id)
+	}{{"0", 0}, {"v", 31}, {"8000000000000", math.MinInt64}, {"fvvvvvvvvvvvv", -1}} {
+		id, err := randflake.DecodeString(tc.text)
+		if err != nil || id != tc.id {
+			t.Errorf("DecodeString(%q) = %d, %v; want %d", tc.text, id, err, tc.id)
 		}
-	}
-}
-
-func TestInspectString(t *testing.T) {
-	keyString := "dffd6021bb2bd5b0af676290809ec3a5"
-	encoded := "3vgoe12ccb8gh"
-
-	key, err := hex.DecodeString(keyString)
-	if err != nil {
-		t.Fatalf("Failed to decode key: %v", err)
-	}
-
-	id, err := DecodeString(encoded)
-	if err != nil {
-		t.Fatalf("Failed to decode ID: %v", err)
-	}
-
-	if id != 4594531474933654033 {
-		t.Errorf("Expected ID 4594531474933654033, got %d", id)
-	}
-
-	g, err := NewGenerator(1, time.Now().Unix(), time.Now().Unix()+3600, key)
-	if err != nil {
-		t.Fatalf("Failed to create generator: %v", err)
-	}
-
-	timestamp0, nodeID0, counter0, err := g.Inspect(int64(id))
-	if err != nil {
-		t.Fatalf("Failed to inspect ID: %v", err)
-	}
-
-	if timestamp0 != 1733706297 {
-		t.Errorf("Expected timestamp 1733706297, got %d", timestamp0)
-	}
-
-	if nodeID0 != 42 {
-		t.Errorf("Expected node ID 42, got %d", nodeID0)
-	}
-
-	if counter0 != 1 {
-		t.Errorf("Expected counter 1, got %d", counter0)
-	}
-
-	timestamp1, nodeID1, counter1, err := g.InspectString(encoded)
-	if err != nil {
-		t.Fatalf("Failed to inspect ID: %v", err)
-	}
-
-	if timestamp1 != 1733706297 {
-		t.Errorf("Expected timestamp 1733706297, got %d", timestamp1)
-	}
-
-	if nodeID1 != 42 {
-		t.Errorf("Expected node ID 42, got %d", nodeID1)
-	}
-
-	if counter1 != 1 {
-		t.Errorf("Expected counter 1, got %d", counter1)
 	}
 }

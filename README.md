@@ -3,7 +3,7 @@
 [![PYPI](https://img.shields.io/pypi/v/randflake?style=for-the-badge&logo=python
 )](https://pypi.org/project/randflake/)
 [![npm](https://img.shields.io/npm/v/randflake?color=cb0303&style=for-the-badge)](https://www.npmjs.com/package/randflake)
-[![Go Reference](https://img.shields.io/badge/go-reference-%23007d9c?style=for-the-badge&logo=go)](https://pkg.go.dev/gosuda.org/randflake)
+[![Go Reference](https://img.shields.io/badge/go-reference-%23007d9c?style=for-the-badge&logo=go)](https://pkg.go.dev/gosuda.org/randflake/v2)
 
 # Randflake ID
 
@@ -24,19 +24,24 @@ Randflake ID is a distributed, uniform, unpredictable, and unique random ID gene
 
 ### Go
 ```bash
-go get -u gosuda.org/randflake
+go get gosuda.org/randflake/v2@v2.1.0
 ```
 
-The `gosuda.org/randflake/v2` package is included in this module. Go 1.23 remains supported.
+The Go module is `gosuda.org/randflake/v2`, with the v2 API at its root. Go 1.23 remains supported. The original constructor API is available at `gosuda.org/randflake/v2/legacy`; the unsuffixed module path remains on the v1 release line.
 
 ### Python
 ```bash
-pip install randflake
+pip install randflake==2.1.0
 ```
 
 ### TypeScript/JavaScript
 ```bash
-npm install randflake
+npm install randflake@2.1.0
+```
+
+### JSR
+```bash
+npx jsr add @safe/randflake@2.1.0
 ```
 
 ## Usage Examples (v2)
@@ -110,7 +115,7 @@ gstime is not a dependency. An application-supplied clock must explicitly projec
 
 ## Migrating from the Legacy API
 
-The original Go package, Python `randflake.Generator`, and TypeScript `randflake` entrypoint remain available as deprecated compatibility facades. Removal is reserved for a future major release. Python warns at construction, never per generated ID; Go and TypeScript use deprecation documentation.
+Go callers migrate to `gosuda.org/randflake/v2`, or temporarily use `gosuda.org/randflake/v2/legacy` for the deprecated constructor and signatures. The unsuffixed Go module remains available through existing v1 tags. Python `randflake.Generator` and the TypeScript `randflake` entrypoint remain deprecated compatibility facades. Removal is reserved for a future major release. Python warns at construction, never per generated ID; Go and TypeScript use deprecation documentation.
 
 | Legacy | v2 |
 |---|---|
@@ -164,7 +169,7 @@ Vector lease ends retain the legacy inclusive convention; v2 consumers add one t
 To regenerate the canonical vectors after an intentional algorithm change:
 
 ```bash
-go test . -run TestRandflakeTestVectors -update-test-vectors
+go test ./legacy -run TestRandflakeTestVectors -update-test-vectors
 ```
 
 ## Contributing

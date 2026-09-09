@@ -1,4 +1,4 @@
-package randflake
+package legacy
 
 import (
 	"encoding/hex"
@@ -37,12 +37,12 @@ func TestRandflakeTestVectors(t *testing.T) {
 	vectors := buildRandflakeVectors(t)
 
 	if *updateTestVectors || os.Getenv("RANDFLAKE_UPDATE_TEST_VECTORS") == "1" {
-		writeRandflakeVectors(t, "test_vectors.json", vectors)
+		writeRandflakeVectors(t, "../test_vectors.json", vectors)
 	}
 
-	data, err := os.ReadFile("test_vectors.json")
+	data, err := os.ReadFile("../test_vectors.json")
 	if err != nil {
-		t.Fatalf("read test_vectors.json: %v (regenerate with `go test . -run TestRandflakeTestVectors -update-test-vectors`)", err)
+		t.Fatalf("read test_vectors.json: %v (regenerate with `go test ./legacy -run TestRandflakeTestVectors -update-test-vectors`)", err)
 	}
 
 	var actual []randflakeVector
@@ -55,7 +55,7 @@ func TestRandflakeTestVectors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("marshal expected vectors: %v", err)
 		}
-		t.Fatalf("test_vectors.json is stale or incorrect; regenerate with `go test . -run TestRandflakeTestVectors -update-test-vectors`\nexpected:\n%s", expectedJSON)
+		t.Fatalf("test_vectors.json is stale or incorrect; regenerate with `go test ./legacy -run TestRandflakeTestVectors -update-test-vectors`\nexpected:\n%s", expectedJSON)
 	}
 }
 

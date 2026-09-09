@@ -1,24 +1,118 @@
-# This workflow will upload a Python Package to PyPI when a release is created
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python#publishing-to-package-registries
-
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-name: Upload Python Package
+name: Release
 
 on:
+  push:
+    tags:
+      - 'v2.[0-9]+.[0-9]+'
   release:
     types: [published]
 
 permissions:
   contents: read
 
-jobs:
-  release-build:
-    runs-on: ubuntu-latest
+concurrency:
+  group: release-${{ github.event.release.tag_name || github.ref_name }}
+  cancel-in-progress: false
 
+jobs:
+  verify:
+    name: Verify release
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      GOTOOLCHAIN: local
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Verify Go module and release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v2\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            printf 'Invalid stable v2 tag: %s\n' "$RELEASE_TAG" >&2
+            exit 1
+          fi
+          if [[ "$(go list -m)" != gosuda.org/randflake/v2 ]]; then
+            printf 'Go module must be gosuda.org/randflake/v2\n' >&2
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$(git rev-parse --verify "$GITHUB_REF^{commit}")"
+
+      - name: Verify coordinated package versions
+        shell: python
+        run: |
+          import json
+          import os
+          from pathlib import Path
+          import tomllib
+
+          version = os.environ["RELEASE_TAG"].removeprefix("v")
+          manifests = [Path("package.json")]
+          for package in ("sparx64", "randflake"):
+              directory = Path("src/randflake-ts") / package
+              manifests.extend((directory / "package.json", directory / "jsr.json"))
+          for manifest in manifests:
+              actual = json.loads(manifest.read_text())["version"]
+              if actual != version:
+                  raise ValueError(f"{manifest}: version {actual!r} does not match {version!r}")
+          with open("pyproject.toml", "rb") as manifest:
+              actual = tomllib.load(manifest)["project"]["version"]
+          if actual != version:
+              raise ValueError(f"pyproject.toml: version {actual!r} does not match {version!r}")
+
+      - name: Test Go
+        run: go test -v ./...
+
+      - name: Test Go with race detector
+        run: go test -race ./...
+
+      - name: Vet Go
+        run: go vet ./...
+
+      - name: Build external Go consumer from tagged source
+        shell: bash
+        env:
+          GOPROXY: "off"
+        run: |
+          set -euo pipefail
+          scratch=$(mktemp -d)
+          trap 'rm -rf -- "$scratch"' EXIT
+          mkdir "$scratch/module" "$scratch/consumer"
+          git archive HEAD | tar -x -C "$scratch/module"
+          go -C "$scratch/consumer" mod init release.example/consumer
+          go -C "$scratch/consumer" mod edit \
+            "-require=gosuda.org/randflake/v2@$RELEASE_TAG" \
+            "-replace=gosuda.org/randflake/v2=$scratch/module"
+          go -C "$scratch/consumer" build gosuda.org/randflake/v2 gosuda.org/randflake/v2/legacy
+
+  npm:
+    name: Publish npm packages
+    if: github.event_name == 'push'
+    needs: verify
+    uses: ./.github/workflows/npm-publish.yml
+    secrets:
+      npm_token: ${{ secrets.npm_token }}
+
+  release-build:
+    name: Build Python package
+    needs: verify
+    if: ${{ !cancelled() && (needs.verify.result == 'success' || (github.event_name == 'release' && needs.verify.result == 'skipped')) }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
@@ -26,9 +120,15 @@ jobs:
         with:
           python-version: "3.x"
 
+      - name: Test Python
+        run: python -m unittest discover -s src/randflake -t src
+
       - name: Build release distributions
+        shell: bash
         run: |
-          # NOTE: put your own distribution build steps here.
+          set -euo pipefail
+          SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
+          export SOURCE_DATE_EPOCH
           python -m pip install build
           python -m build
 
@@ -37,26 +137,19 @@ jobs:
         with:
           name: release-dists
           path: dist/
+          if-no-files-found: error
+          overwrite: true
 
   pypi-publish:
+    name: Publish Python package
+    needs: release-build
+    if: ${{ !cancelled() && needs.release-build.result == 'success' }}
     runs-on: ubuntu-latest
-    needs:
-      - release-build
     permissions:
-      # IMPORTANT: this permission is mandatory for trusted publishing
       id-token: write
-
-    # Dedicated environments with protections for publishing are strongly recommended.
-    # For more information, see: https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#deployment-protection-rules
     environment:
       name: pypi
-      # OPTIONAL: uncomment and update to include your PyPI project URL in the deployment status:
       url: https://pypi.org/p/randflake
-      #
-      # ALTERNATIVE: if your GitHub Release name is the PyPI project version string
-      # ALTERNATIVE: exactly, uncomment the following line instead:
-      # url: https://pypi.org/project/YOURPROJECT/${{ github.event.release.name }}
-
     steps:
       - name: Retrieve release distributions
         uses: actions/download-artifact@v4
@@ -68,3 +161,60 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+          skip-existing: true
+
+  jsr:
+    name: Publish JSR packages
+    if: github.event_name == 'push'
+    needs: npm
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/jsr-publish.yml
+
+  github-release:
+    name: Publish GitHub Release
+    if: github.event_name == 'push'
+    needs: [npm, pypi-publish, jsr]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --silent
+          notes=$(mktemp)
+          trap 'rm -f -- "$notes"' EXIT
+          version=${RELEASE_TAG#v}
+          cat > "$notes" <<EOF
+          This release publishes Go, Python, npm, and JSR packages together at $version, including the sparx64 packages.
+
+          ## Install
+
+          - Go: \`go get gosuda.org/randflake/v2@$RELEASE_TAG\`
+          - Python: \`python -m pip install randflake==$version\`
+          - npm: \`npm install randflake@$version\`
+          - JSR: \`npx jsr add @safe/randflake@$version\`
+
+          ## Go migration
+
+          Go 1.23 or newer is required. The module root \`gosuda.org/randflake/v2\` exposes \`Config\`, \`New\`, and \`Generator\` with whole Unix seconds and half-open leases \`[Start, EndExclusive)\`.
+
+          For the compatibility API, import \`randflake "gosuda.org/randflake/v2/legacy"\`. It retains \`NewGenerator\`, inclusive lease ends, and the legacy inspection signatures. Existing imports of \`gosuda.org/randflake\` must migrate to the v2 module path.
+
+          The encrypted 64-bit ID layout and string format are preserved; existing IDs remain readable with the same key. This is a library release, distributed through Go modules and the package registries, without platform binaries.
+          EOF
+          existing_release=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            | jq -r --arg tag "$RELEASE_TAG" '.[] | select(.tag_name == $tag) | .id')
+          if [[ -n "$existing_release" ]]; then
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "$RELEASE_TAG" --notes-file "$notes" --draft=false
+          else
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "$RELEASE_TAG" --notes-file "$notes"
+          fi

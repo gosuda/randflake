@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"gosuda.org/randflake/sparx64"
+	"gosuda.org/randflake/v2/sparx64"
 )
 
 const (

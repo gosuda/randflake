@@ -1,4 +1,4 @@
-package randflake
+package legacy
 
 import (
 	"errors"

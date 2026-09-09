@@ -3,6 +3,17 @@ name: Node.js Package Publish NPM
 on:
   release:
     types: [created]
+  workflow_call:
+    secrets:
+      npm_token:
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish-${{ github.event.release.tag_name || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   publish-npm:
@@ -17,9 +28,13 @@ jobs:
       - name: Install TypeScript dependencies
         run: bash .github/scripts/npm-ci-with-logs.sh
 
-      - run: npm publish --workspace sparx64
+      - name: Build TypeScript packages
+        run: npm run build
+
+      - name: Test TypeScript packages
+        run: npm test
+
+      - name: Publish npm packages
+        run: node .github/scripts/publish-npm.mjs
         env:
-          NODE_AUTH_TOKEN: ${{secrets.npm_token}}
-      - run: npm publish --workspace randflake
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.npm_token}}
+          NODE_AUTH_TOKEN: ${{ secrets.npm_token }}
