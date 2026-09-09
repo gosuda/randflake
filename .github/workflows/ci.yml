@@ -96,6 +96,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read
+      contents: read
     steps:
       - name: Report sanitized npm failure categories
         env:
@@ -104,8 +105,20 @@ jobs:
         run: |
           set -euo pipefail
           log=$(mktemp)
-          trap 'rm -f -- "$log"' EXIT
-          gh api "repos/$GITHUB_REPOSITORY/actions/jobs/102300000507/logs" > "$log"
+          error=$(mktemp)
+          trap 'rm -f -- "$log" "$error"' EXIT
+          if ! gh run view --repo "$GITHUB_REPOSITORY" --job 102300000507 --log > "$log" 2> "$error"; then
+            python3 - "$error" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+          text = Path(sys.argv[1]).read_text(errors="replace")
+          codes = re.findall(r"HTTP (\d{3})", text)
+          for code in codes or ["UNKNOWN"]:
+              print(f"::notice title=Release diagnostic::LOG_FETCH_FAILED_{code}")
+          PY
+            exit 1
+          fi
           python3 - "$log" <<'PY'
           import re
           import sys
