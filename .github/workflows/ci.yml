@@ -137,6 +137,14 @@ jobs:
           categories += ["REGISTRY_HTTP_" + code for code in re.findall(r"registry HTTP (\d{3})", text)]
           if not categories:
               categories = ["UNCLASSIFIED_NPM_FAILURE"]
+          operation = re.search(r"Command failed: npm (pack|publish)", text)
+          if operation:
+              categories.append("NPM_COMMAND_" + operation.group(1).upper())
+          for method, path in sorted(set(re.findall(r"\b(GET|PUT|POST) https://registry\.npmjs\.org/([^\s?#]+)", text))):
+              package = path.split("/", 1)[0]
+              if package not in ("sparx64", "randflake"):
+                  package = "OTHER_PACKAGE"
+              categories.append(f"NPM_REQUEST_{method}_{package}")
           for category in categories:
               print(f"::notice title=Release diagnostic::{category}")
           PY
