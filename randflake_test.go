@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"math"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -284,85 +283,30 @@ func TestGenerator_Inspect(t *testing.T) {
 }
 
 func TestBase32HexEncode(t *testing.T) {
-	tests := []uint64{
-		0,
-		1,
-		10,
-		100,
-		1000,
-		10000,
-		100000,
-		1000000,
-		10000000,
-		100000000,
-		1000000000,
-		10000000000,
-		100000000000,
-		1000000000000,
-		10000000000000,
-		100000000000000,
-		1000000000000000,
-		10000000000000000,
-		100000000000000000,
-		1000000000000000000,
-		math.MaxUint64,
-		math.MaxInt64,
-	}
-
-	for i := range tests {
-		enc1 := strconv.FormatUint(tests[i], 32)
-		enc2 := base32hexencode(tests[i])
-		if enc1 != enc2 {
-			t.Errorf("Expected %s, got %s", enc1, enc2)
-			t.Fail()
-			return
+	for _, tc := range []struct {
+		id   int64
+		text string
+	}{
+		{0, "0"}, {31, "v"}, {32, "10"},
+		{math.MaxInt64, "7vvvvvvvvvvvv"}, {math.MinInt64, "8000000000000"}, {-1, "fvvvvvvvvvvvv"},
+	} {
+		if got := EncodeString(tc.id); got != tc.text {
+			t.Errorf("EncodeString(%d) = %q, want %q", tc.id, got, tc.text)
 		}
 	}
 }
 
 func TestBase32HexDecode(t *testing.T) {
-	tests := []uint64{
-		0,
-		1,
-		10,
-		100,
-		1000,
-		10000,
-		100000,
-		1000000,
-		10000000,
-		100000000,
-		1000000000,
-		10000000000,
-		100000000000,
-		1000000000000,
-		10000000000000,
-		100000000000000,
-		1000000000000000,
-		10000000000000000,
-		100000000000000000,
-		1000000000000000000,
-		math.MaxUint64,
-		math.MaxInt64,
-	}
-
-	for i := range tests {
-		dec1, err := strconv.ParseUint(base32hexencode(tests[i]), 32, 64)
-		if err != nil {
-			t.Errorf("Error decoding %d: %v", tests[i], err)
-			t.Fail()
-			return
-		}
-		dec2, err := base32hexdecode(base32hexencode(tests[i]))
-		if err != nil {
-			t.Errorf("Error decoding %d: %v", tests[i], err)
-			t.Fail()
-			return
-		}
-		if dec1 != dec2 {
-			t.Errorf("Expected %d, got %d", dec1, dec2)
-			t.Fail()
-			return
+	for _, tc := range []struct {
+		text string
+		id   int64
+	}{
+		{"0", 0}, {"V", 31}, {"10", 32}, {"8000000000000", math.MinInt64},
+		{"fvvvvvvvvvvvv", -1}, {"", 0}, {"1=ignored", 1}, {"g000000000001", 1},
+	} {
+		got, err := DecodeString(tc.text)
+		if err != nil || got != tc.id {
+			t.Errorf("DecodeString(%q) = %d, %v; want %d", tc.text, got, err, tc.id)
 		}
 	}
 }
@@ -422,31 +366,5 @@ func TestInspectString(t *testing.T) {
 
 	if counter1 != 1 {
 		t.Errorf("Expected counter 1, got %d", counter1)
-	}
-}
-
-func TestGenerator_GetLeaseInfo(t *testing.T) {
-	nodeID := int64(42)
-	leaseStart := int64(1730000000)
-	leaseEnd := int64(1730003600)
-	secret := make([]byte, 16)
-
-	g, err := NewGenerator(nodeID, leaseStart, leaseEnd, secret)
-	if err != nil {
-		t.Fatalf("Failed to create generator: %v", err)
-	}
-
-	info := g.GetLeaseInfo()
-
-	if info.NodeID != nodeID {
-		t.Errorf("Expected NodeID %d, got %d", nodeID, info.NodeID)
-	}
-
-	if info.LeaseStart != leaseStart {
-		t.Errorf("Expected LeaseStart %d, got %d", leaseStart, info.LeaseStart)
-	}
-
-	if info.LeaseEnd != leaseEnd {
-		t.Errorf("Expected LeaseEnd %d, got %d", leaseEnd, info.LeaseEnd)
 	}
 }

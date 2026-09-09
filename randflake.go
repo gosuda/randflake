@@ -1,278 +1,131 @@
+// Package randflake retains the original inclusive-lease API.
+//
+// Deprecated: use gosuda.org/randflake/v2 for half-open leases and constructor-supplied clocks.
 package randflake
 
-import (
-	"encoding/binary"
-	"errors"
-	"sync/atomic"
-	"time"
-
-	"gosuda.org/randflake/sparx64"
-)
+import "gosuda.org/randflake/internal/generator"
 
 const (
-	// Sunday, October 27, 2024 3:33:20 AM UTC
-	RANDFLAKE_EPOCH_OFFSET = 1730000000
-
-	// 30 bits for timestamp (lifetime of 34 years)
-	RANDFLAKE_TIMESTAMP_BITS = 30
-	// 17 bits for node id (max 131072 nodes)
-	RANDFLAKE_NODE_BITS = 17
-	// 17 bits for sequence (max 131072 sequences)
-	RANDFLAKE_SEQUENCE_BITS = 17
-
-	// Tuesday, November 5, 2058 5:10:23 PM UTC
-	RANDFLAKE_MAX_TIMESTAMP = RANDFLAKE_EPOCH_OFFSET + 1<<RANDFLAKE_TIMESTAMP_BITS - 1
-	// 131071 nodes
-	RANDFLAKE_MAX_NODE = 1<<RANDFLAKE_NODE_BITS - 1
-	// 131071 sequences
-	RANDFLAKE_MAX_SEQUENCE = 1<<RANDFLAKE_SEQUENCE_BITS - 1
+	RANDFLAKE_EPOCH_OFFSET   = generator.Epoch
+	RANDFLAKE_TIMESTAMP_BITS = generator.TimestampBits
+	RANDFLAKE_NODE_BITS      = generator.NodeBits
+	RANDFLAKE_SEQUENCE_BITS  = generator.SequenceBits
+	RANDFLAKE_MAX_TIMESTAMP  = generator.MaxTimestamp
+	RANDFLAKE_MAX_NODE       = generator.MaxNode
+	RANDFLAKE_MAX_SEQUENCE   = generator.MaxSequence
 )
 
 var (
-	ErrRandflakeDead        = errors.New("randflake: the randflake id is dead after 34 years of lifetime")
-	ErrInvalidSecret        = errors.New("randflake: invalid secret, secret must be 16 bytes long")
-	ErrInvalidLease         = errors.New("randflake: invalid lease, lease expired or not started yet")
-	ErrInvalidNode          = errors.New("randflake: invalid node id, node id must be between 0 and 131071")
-	ErrResourceExhausted    = errors.New("randflake: resource exhausted (generator can't handle current throughput, try using multiple randflake instances)")
-	ErrConsistencyViolation = errors.New("randflake: timestamp consistency violation, the current time is less than the last time")
-	ErrInvalidID            = errors.New("randflake: invalid id")
+	ErrRandflakeDead        = generator.ErrRandflakeDead
+	ErrInvalidSecret        = generator.ErrInvalidSecret
+	ErrInvalidLease         = generator.ErrInvalidLease
+	ErrInvalidNode          = generator.ErrInvalidNode
+	ErrResourceExhausted    = generator.ErrResourceExhausted
+	ErrConsistencyViolation = generator.ErrConsistencyViolation
+	ErrInvalidID            = generator.ErrInvalidID
 )
 
+// Generator supports concurrent generation but must not be copied after construction.
+//
+// Deprecated: use v2.Generator.
 type Generator struct {
-	leaseStart int64
-	leaseEnd   atomic.Int64
-	nodeID     int64
-	sequence   atomic.Int64
-	rollover   atomic.Int64
-	sbox       *sparx64.Sparx64
+	core generator.Generator
 
-	// TimeSource is a function that returns the current time in seconds since the epoch.
-	// If TimeSource is nil, time.Now().Unix() will be used.
+	// TimeSource returns Unix seconds. Set it before concurrent use; nil uses the system clock.
+	// Deprecated: supply v2.Config.Clock at construction.
 	TimeSource func() int64
 }
 
-// NewGenerator creates a new randflake generator.
+// NewGenerator assigns nodeID the inclusive interval [leaseStart, leaseEnd].
+// A node must have only one active generator for any overlapping lease seconds,
+// including across process restarts.
 //
-// nodeID is the node ID of the randflake generator. (must be unique in the cluster in a specific lease interval)
-// leaseStart is the start time of the lease in seconds since the epoch.
-// leaseEnd is the end time of the lease in seconds since the epoch.
-// secret is the secret used to generate the randflake id. (must be 16 bytes long)
-func NewGenerator(nodeID int64, leaseStart int64, leaseEnd int64, secret []byte) (*Generator, error) {
+// Deprecated: use v2.New with an exclusive lease end.
+func NewGenerator(nodeID, leaseStart, leaseEnd int64, secret []byte) (*Generator, error) {
 	if leaseEnd < leaseStart {
 		return nil, ErrInvalidLease
 	}
-
 	if nodeID < 0 || nodeID > RANDFLAKE_MAX_NODE {
 		return nil, ErrInvalidNode
 	}
-
 	if leaseStart < RANDFLAKE_EPOCH_OFFSET {
 		return nil, ErrInvalidLease
 	}
-
 	if leaseEnd > RANDFLAKE_MAX_TIMESTAMP {
 		return nil, ErrRandflakeDead
 	}
-
-	if len(secret) != 16 {
-		return nil, ErrInvalidSecret
+	g := new(Generator)
+	lease := generator.Lease{NodeID: uint32(nodeID), Start: generator.UnixSeconds(leaseStart), EndExclusive: generator.UnixSeconds(leaseEnd + 1)}
+	if err := g.core.Init(lease, secret, nil); err != nil {
+		return nil, err
 	}
-
-	g := Generator{
-		leaseStart: leaseStart,
-		leaseEnd:   atomic.Int64{},
-		nodeID:     nodeID,
-		sequence:   atomic.Int64{},
-		rollover:   atomic.Int64{},
-		sbox:       sparx64.NewSparx64(secret),
-	}
-	g.leaseEnd.Store(leaseEnd)
-	g.rollover.Store(leaseStart)
-
-	return &g, nil
+	return g, nil
 }
 
-// UpdateLease updates the lease end time and returns true if the lease was updated.
-//
-// the leaseStart must equal to the leaseStart of the generator.
-// the leaseEnd must be greater than the leaseStart.
-// the leaseEnd must be less than or equal to the maximum timestamp (2058-11-05 17:10:23 UTC).
-// the leaseEnd must be greater than the current leaseEnd.
+// UpdateLease extends the inclusive lease end and reports whether it changed.
+// Deprecated: use v2.Generator.ExtendLease.
 func (g *Generator) UpdateLease(leaseStart, leaseEnd int64) bool {
-	if leaseStart != g.leaseStart {
+	lease := g.core.Lease()
+	if leaseStart != int64(lease.Start) || leaseEnd < leaseStart || leaseEnd > RANDFLAKE_MAX_TIMESTAMP {
 		return false
 	}
-
-	if leaseEnd < leaseStart {
-		return false
-	}
-
-	if leaseEnd > RANDFLAKE_MAX_TIMESTAMP {
-		return false
-	}
-
-	current := g.leaseEnd.Load()
-	if current < leaseEnd {
-		if g.leaseEnd.CompareAndSwap(current, leaseEnd) {
-			return true
-		}
-	}
-	return false
+	lease.EndExclusive = generator.UnixSeconds(leaseEnd + 1)
+	updated, err := g.core.ExtendLease(lease)
+	return updated && err == nil
 }
 
-// LeaseInfo represents the lease configuration of a randflake generator.
+// LeaseInfo is a snapshot with an inclusive LeaseEnd.
+// Deprecated: use v2.Lease.
 type LeaseInfo struct {
 	NodeID     int64
 	LeaseStart int64
 	LeaseEnd   int64
 }
 
-// GetLeaseInfo returns the current lease information of the generator.
+// GetLeaseInfo returns a detached snapshot of the inclusive lease.
+// Deprecated: use v2.Generator.Lease.
 func (g *Generator) GetLeaseInfo() LeaseInfo {
-	return LeaseInfo{
-		NodeID:     g.nodeID,
-		LeaseStart: g.leaseStart,
-		LeaseEnd:   g.leaseEnd.Load(),
-	}
+	lease := g.core.Lease()
+	return LeaseInfo{NodeID: int64(lease.NodeID), LeaseStart: int64(lease.Start), LeaseEnd: int64(lease.EndExclusive) - 1}
 }
 
-func (g *Generator) newRAW() (int64, error) {
-	for {
-		var now int64
-		if g.TimeSource != nil {
-			now = g.TimeSource()
-		} else {
-			now = time.Now().Unix()
-		}
-
-		if now < g.leaseStart {
-			return 0, ErrInvalidLease
-		}
-
-		if now > g.leaseEnd.Load() {
-			return 0, ErrInvalidLease
-		}
-
-		ctr := g.sequence.Add(1)
-		if ctr > RANDFLAKE_MAX_SEQUENCE {
-			last_rollover := g.rollover.Load()
-			if now > last_rollover {
-				if !g.rollover.CompareAndSwap(last_rollover, now) {
-					continue
-				}
-				g.sequence.Store(0)
-				ctr = 0
-			} else {
-				if now < last_rollover {
-					return 0, ErrConsistencyViolation
-				}
-				return 0, ErrResourceExhausted
-			}
-		}
-
-		timestamp := int64(now - RANDFLAKE_EPOCH_OFFSET)
-		nodeID := int64(g.nodeID)
-		sequence := int64(ctr)
-
-		return ((timestamp << (RANDFLAKE_NODE_BITS + RANDFLAKE_SEQUENCE_BITS)) |
-			(nodeID << RANDFLAKE_SEQUENCE_BITS) |
-			sequence), nil
-	}
-}
-
-// Generate generates a unique, encrypted ID.
+// Generate returns a signed 64-bit encrypted ID without waiting on clock or sequence errors.
+// Deprecated: use v2.Generator.Generate.
 func (g *Generator) Generate() (int64, error) {
-	id, err := g.newRAW()
-	if err != nil {
-		return 0, err
-	}
-
-	var b [8]byte
-	binary.LittleEndian.PutUint64(b[:], uint64(id))
-	g.sbox.Encrypt(b[:], b[:])
-	return int64(binary.LittleEndian.Uint64(b[:])), nil
+	return g.core.Generate(g.TimeSource)
 }
 
-// GenerateString generates a unique, encrypted ID and returns it as a string.
+// GenerateString returns the canonical base32hex encoding of a new ID.
+// Deprecated: use v2.Generator.GenerateString.
 func (g *Generator) GenerateString() (string, error) {
-	id, err := g.Generate()
-	if err != nil {
-		return "", err
-	}
-	return base32hexencode(uint64(id)), nil
+	return g.core.GenerateString(g.TimeSource)
 }
 
-// Inspect returns the timestamp, node ID, and sequence number of the given ID.
-func (g *Generator) Inspect(id int64) (timestamp int64, nodeID int64, sequence int64, err error) {
-	var b [8]byte
-	binary.LittleEndian.PutUint64(b[:], uint64(id))
-	g.sbox.Decrypt(b[:], b[:])
-	id = int64(binary.LittleEndian.Uint64(b[:]))
-	if id < 0 {
-		return 0, 0, 0, ErrInvalidLease
-	}
-	timestamp = (id >> (RANDFLAKE_NODE_BITS + RANDFLAKE_SEQUENCE_BITS)) + RANDFLAKE_EPOCH_OFFSET
-	nodeID = (id >> RANDFLAKE_SEQUENCE_BITS) & RANDFLAKE_MAX_NODE
-	sequence = id & RANDFLAKE_MAX_SEQUENCE
-	return
+// Inspect decodes fields without authenticating the ID or checking the current lease.
+// Deprecated: use v2.Generator.Inspect for a named result.
+func (g *Generator) Inspect(id int64) (timestamp, nodeID, sequence int64, err error) {
+	parts := g.core.Inspect(id)
+	return int64(parts.Timestamp), int64(parts.NodeID), int64(parts.Sequence), nil
 }
 
-// InspectString returns the timestamp, node ID, and sequence number of the given ID.
-func (g *Generator) InspectString(id string) (timestamp int64, nodeID int64, sequence int64, err error) {
-	num, err := base32hexdecode(id)
+// InspectString retains the original permissive string parsing rules.
+// Deprecated: use v2.Generator.InspectString for canonical input validation.
+func (g *Generator) InspectString(id string) (timestamp, nodeID, sequence int64, err error) {
+	num, err := generator.DecodeLegacy(id)
 	if err != nil {
 		return 0, 0, 0, err
 	}
-	return g.Inspect(int64(num))
+	return g.Inspect(num)
 }
 
-const b32hexchars = "0123456789abcdefghijklmnopqrstuv"
-
-func base32hexencode(num uint64) string {
-	if num == 0 {
-		return "0"
-	}
-
-	var encoded [13]byte
-	idx := 12
-	for num > 0 {
-		encoded[idx] = b32hexchars[num&0x1f]
-		num >>= 5
-		idx--
-	}
-
-	return string(encoded[idx+1:])
-}
-
-func base32hexdecode(s string) (uint64, error) {
-	var num uint64
-	for _, c := range s {
-		if c == '=' {
-			break
-		}
-
-		num <<= 5
-		if c >= '0' && c <= '9' {
-			num += uint64(c - '0')
-		} else if c >= 'a' && c <= 'v' {
-			num += uint64(c - 'a' + 10)
-		} else if c >= 'A' && c <= 'V' {
-			num += uint64(c - 'A' + 10)
-		} else {
-			return 0, ErrInvalidID
-		}
-	}
-	return num, nil
-}
-
+// EncodeString returns the canonical base32hex representation of all 64 ID bits.
+// Deprecated: use v2.EncodeString.
 func EncodeString(id int64) string {
-	return base32hexencode(uint64(id))
+	return generator.Encode(id)
 }
 
+// DecodeString preserves case folding, padding termination and modulo-64 overflow.
+// Deprecated: use v2.DecodeString for strict canonical parsing.
 func DecodeString(s string) (int64, error) {
-	id, err := base32hexdecode(s)
-	if err != nil {
-		return 0, err
-	}
-	return int64(id), nil
+	return generator.DecodeLegacy(s)
 }

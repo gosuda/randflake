@@ -1,109 +1,48 @@
-import time
-import struct
+"""Deprecated inclusive-lease API; new callers should use randflake.v2."""
+
+import warnings
 from dataclasses import dataclass
 from typing import Tuple
-from .sparx64 import Sparx64
 
-# Constants
-RANDFLAKE_EPOCH_OFFSET = 1730000000  # Sunday, October 27, 2024 3:33:20 AM UTC
-
-# Bits allocation
-RANDFLAKE_TIMESTAMP_BITS = 30  # 30 bits for timestamp (lifetime of 34 years)
-RANDFLAKE_NODE_BITS = 17  # 17 bits for node id (max 131072 nodes)
-RANDFLAKE_SEQUENCE_BITS = 17  # 17 bits for sequence (max 131072 sequences)
-
-# Derived constants
-RANDFLAKE_MAX_TIMESTAMP = RANDFLAKE_EPOCH_OFFSET + (1 << RANDFLAKE_TIMESTAMP_BITS) - 1
-RANDFLAKE_MAX_NODE = (1 << RANDFLAKE_NODE_BITS) - 1
-RANDFLAKE_MAX_SEQUENCE = (1 << RANDFLAKE_SEQUENCE_BITS) - 1
-
-
-# Custom error classes
-class RandflakeError(Exception):
-    """Base class for randflake errors"""
-
-    pass
-
-
-class ErrRandflakeDead(RandflakeError):
-    def __init__(self):
-        super().__init__(
-            "randflake: the randflake id is dead after 34 years of lifetime"
-        )
+from ._core import (
+    Config as _Config,
+    ErrConsistencyViolation,
+    ErrInvalidID,
+    ErrInvalidLease,
+    ErrInvalidNode,
+    ErrInvalidSecret,
+    ErrRandflakeDead,
+    ErrResourceExhausted,
+    Lease as _Lease,
+    RandflakeError,
+    RANDFLAKE_EPOCH_OFFSET,
+    RANDFLAKE_MAX_NODE,
+    RANDFLAKE_MAX_SEQUENCE,
+    RANDFLAKE_MAX_TIMESTAMP,
+    RANDFLAKE_NODE_BITS,
+    RANDFLAKE_SEQUENCE_BITS,
+    RANDFLAKE_TIMESTAMP_BITS,
+    _GeneratorCore,
+    _is_integer,
+    decode_string as _decode_string,
+    encode_string as _encodeB32hex,
+)
 
 
-class ErrInvalidSecret(RandflakeError):
-    def __init__(self):
-        super().__init__("randflake: invalid secret, secret must be 16 bytes long")
+def _decodeB32hex(value):
+    return _decode_string(value, strict=False)
 
 
-class ErrInvalidLease(RandflakeError):
-    def __init__(self):
-        super().__init__("randflake: invalid lease, lease expired or not started yet")
-
-
-class ErrInvalidNode(RandflakeError):
-    def __init__(self):
-        super().__init__(
-            "randflake: invalid node id, node id must be between 0 and 131071"
-        )
-
-
-class ErrResourceExhausted(RandflakeError):
-    def __init__(self):
-        super().__init__(
-            "randflake: resource exhausted (generator can't handle current throughput, try using multiple randflake instances)"
-        )
-
-
-class ErrConsistencyViolation(RandflakeError):
-    def __init__(self):
-        super().__init__(
-            "randflake: timestamp consistency violation, the current time is less than the last time"
-        )
-
-
-class ErrInvalidID(RandflakeError):
-    def __init__(self):
-        super().__init__("randflake: invalid id")
-
-
-_base32hexchars = "0123456789abcdefghijklmnopqrstuv"
-
-
-def _encodeB32hex(n):
-    if n < 0:
-        n += 1 << 64
-
-    if n == 0:
-        return "0"
-
-    result = ""
-    while n > 0:
-        result = _base32hexchars[n & 0x1F] + result
-        n = n // 32
-    return result
-
-
-def _decodeB32hex(s):
-    n = 0
-    for c in s:
-        if c == "=":
-            break
-
-        n <<= 5
-        if "0" <= c <= "9":
-            n += ord(c) - ord("0")
-        elif "a" <= c <= "v":
-            n += ord(c) - ord("a") + 10
-        elif "A" <= c <= "V":
-            n += ord(c) - ord("A") + 10
-        else:
-            raise ErrInvalidID()
-
-    if n >= 1 << 63:
-        n -= 1 << 64
-    return n
+def _legacy_lease(node_id: int, lease_start: int, lease_end: int) -> _Lease:
+    if (
+        not _is_integer(lease_start)
+        or not _is_integer(lease_end)
+        or lease_end < lease_start
+    ):
+        raise ErrInvalidLease()
+    if lease_end > RANDFLAKE_MAX_TIMESTAMP:
+        raise ErrRandflakeDead()
+    return _Lease(node_id, lease_start, lease_end + 1)
 
 
 @dataclass
@@ -115,107 +54,56 @@ class LeaseInfo:
 
 class Generator:
     def __init__(self, node_id: int, lease_start: int, lease_end: int, secret: bytes):
-        if lease_end < lease_start:
-            raise ErrInvalidLease()
-
-        if not (0 <= node_id <= RANDFLAKE_MAX_NODE):
-            raise ErrInvalidNode()
-
-        if lease_start < RANDFLAKE_EPOCH_OFFSET:
-            raise ErrInvalidLease()
-
-        if lease_end > RANDFLAKE_MAX_TIMESTAMP:
-            raise ErrRandflakeDead()
-
-        if len(secret) != 16:
-            raise ErrInvalidSecret()
-
-        self.lease_start = lease_start
-        self.lease_end = lease_end
-        self.node_id = node_id
-        self.sequence = 0
-        self.rollover = lease_start
-        self.sbox = Sparx64(secret)
-        self.time_source = None
-
-    def update_lease(self, lease_start: int, lease_end: int) -> bool:
-        if lease_start != self.lease_start:
-            return False
-
-        if lease_end < lease_start:
-            return False
-
-        if lease_end > RANDFLAKE_MAX_TIMESTAMP:
-            return False
-
-        if self.lease_end < lease_end:
-            self.lease_end = lease_end
-            return True
-
-        return False
-
-    def get_lease_info(self) -> LeaseInfo:
-        return LeaseInfo(
-            node_id=self.node_id,
-            lease_start=self.lease_start,
-            lease_end=self.lease_end,
+        warnings.warn(
+            "randflake.Generator is deprecated; use randflake.v2.Generator",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self.__core = _GeneratorCore(
+            _Config(_legacy_lease(node_id, lease_start, lease_end), secret)
         )
 
-    def _new_raw(self) -> int:
-        while True:
-            now = self.time_source() if self.time_source else int(time.time())
+    @property
+    def node_id(self) -> int:
+        return self.__core.lease().node_id
 
-            if now < self.lease_start:
-                raise ErrInvalidLease()
+    @property
+    def lease_start(self) -> int:
+        return self.__core.lease().start
 
-            if now > self.lease_end:
-                raise ErrInvalidLease()
+    @property
+    def lease_end(self) -> int:
+        return self.__core.lease().end_exclusive - 1
 
-            self.sequence += 1
-            if self.sequence > RANDFLAKE_MAX_SEQUENCE:
-                if now > self.rollover:
-                    self.rollover = now
-                    self.sequence = 0
-                else:
-                    if now < self.rollover:
-                        raise ErrConsistencyViolation()
-                    raise ErrResourceExhausted()
+    @property
+    def time_source(self):
+        return self.__core.clock()
 
-            timestamp = now - RANDFLAKE_EPOCH_OFFSET
-            return (
-                (timestamp << (RANDFLAKE_NODE_BITS + RANDFLAKE_SEQUENCE_BITS))
-                | (self.node_id << RANDFLAKE_SEQUENCE_BITS)
-                | self.sequence
+    @time_source.setter
+    def time_source(self, clock):
+        self.__core.set_clock(clock)
+
+    def update_lease(self, lease_start: int, lease_end: int) -> bool:
+        try:
+            return self.__core.extend_lease(
+                _legacy_lease(self.node_id, lease_start, lease_end)
             )
+        except RandflakeError:
+            return False
+
+    def get_lease_info(self) -> LeaseInfo:
+        lease = self.__core.lease()
+        return LeaseInfo(lease.node_id, lease.start, lease.end_exclusive - 1)
 
     def generate(self) -> int:
-        id_raw = self._new_raw()
-        src = struct.pack("<q", id_raw)
-        dst = bytearray(8)  # Use bytearray for dst
-        self.sbox.encrypt(dst, src)
-        return struct.unpack("<q", dst)[0]
+        return self.__core.generate()
 
     def generate_string(self) -> str:
-        _id = self.generate()
-        return _encodeB32hex(_id)
+        return _encodeB32hex(self.__core.generate())
 
     def inspect(self, id_val: int) -> Tuple[int, int, int]:
-        src = struct.pack("<q", id_val)
-        dst = bytearray(8)  # Use bytearray for dst
-        self.sbox.decrypt(dst, src)
-        id_raw = struct.unpack("<q", dst)[0]
-
-        if id_raw < 0:
-            raise ErrInvalidLease()
-
-        timestamp = (
-            id_raw >> (RANDFLAKE_NODE_BITS + RANDFLAKE_SEQUENCE_BITS)
-        ) + RANDFLAKE_EPOCH_OFFSET
-        node_id = (id_raw >> RANDFLAKE_SEQUENCE_BITS) & RANDFLAKE_MAX_NODE
-        sequence = id_raw & RANDFLAKE_MAX_SEQUENCE
-
-        return timestamp, node_id, sequence
+        parts = self.__core.inspect(id_val)
+        return parts.timestamp, parts.node_id, parts.sequence
 
     def inspect_string(self, id_str: str) -> Tuple[int, int, int]:
-        id_val = _decodeB32hex(id_str)
-        return self.inspect(id_val)
+        return self.inspect(_decodeB32hex(id_str))

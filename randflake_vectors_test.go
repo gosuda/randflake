@@ -82,6 +82,8 @@ func buildRandflakeVectors(t *testing.T) []randflakeVector {
 		{"27182818284590452353602874713526", 27182, 1850000000, 1860000000, 1852718281, 84590},
 		{"11235813213455891442333776109871", 1098, 1900000000, 1910000000, 1901123581, 33776},
 		{"fedcba98765432100123456789abcdef", RANDFLAKE_MAX_NODE, maxPositiveTimestamp - 10, maxPositiveTimestamp, maxPositiveTimestamp, RANDFLAKE_MAX_SEQUENCE},
+		{"00000000000000000000000000000000", 0, maxPositiveTimestamp + 1, maxPositiveTimestamp + 1, maxPositiveTimestamp + 1, 0},
+		{"ffffffffffffffffffffffffffffffff", RANDFLAKE_MAX_NODE, RANDFLAKE_MAX_TIMESTAMP, RANDFLAKE_MAX_TIMESTAMP, RANDFLAKE_MAX_TIMESTAMP, 0},
 	}
 
 	vectors := make([]randflakeVector, 0, len(specs))
@@ -103,11 +105,13 @@ func buildRandflakeVector(t *testing.T, spec randflakeVectorSpec) randflakeVecto
 	if err != nil {
 		t.Fatalf("new generator for vector %+v: %v", spec, err)
 	}
-	prepareGeneratorForVector(generator, spec)
-
-	encryptedID, err := generator.Generate()
-	if err != nil {
-		t.Fatalf("generate vector %+v: %v", spec, err)
+	generator.TimeSource = func() int64 { return spec.timestamp }
+	var encryptedID int64
+	for range spec.sequence + 1 {
+		encryptedID, err = generator.Generate()
+		if err != nil {
+			t.Fatalf("generate vector %+v: %v", spec, err)
+		}
 	}
 
 	encodedID := EncodeString(encryptedID)
@@ -147,17 +151,6 @@ func buildRandflakeVector(t *testing.T, spec randflakeVectorSpec) randflakeVecto
 		EncryptedID: strconv.FormatInt(encryptedID, 10),
 		EncodedID:   encodedID,
 	}
-}
-
-func prepareGeneratorForVector(generator *Generator, spec randflakeVectorSpec) {
-	if spec.sequence == 0 {
-		generator.sequence.Store(RANDFLAKE_MAX_SEQUENCE)
-		generator.rollover.Store(spec.timestamp - 1)
-	} else {
-		generator.sequence.Store(spec.sequence - 1)
-		generator.rollover.Store(spec.leaseStart)
-	}
-	generator.TimeSource = func() int64 { return spec.timestamp }
 }
 
 func composeRawID(timestamp, nodeID, sequence int64) uint64 {

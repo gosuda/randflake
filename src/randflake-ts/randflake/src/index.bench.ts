@@ -1,32 +1,29 @@
-import { bench, describe } from "vitest";
-import { Generator } from "./index";
+import { bench, describe } from 'vitest';
+import { Generator as LegacyGenerator } from './index.js';
+import {
+  Generator,
+  RANDFLAKE_EPOCH_OFFSET,
+  RANDFLAKE_MAX_SEQUENCE,
+  RANDFLAKE_MAX_TIMESTAMP,
+} from './v2.js';
 
-describe("Generator Benchmarks", () => {
-  // Pre-initialize generators for pure generation benchmarks
+describe('Generator with an injected clock', () => {
   const secret = new Uint8Array(16);
-  crypto.getRandomValues(secret);
-  const now = Math.floor(Date.now() / 1000);
+  let modernCalls = 0;
+  const generator = new Generator({
+    lease: { nodeID: 1, start: RANDFLAKE_EPOCH_OFFSET, endExclusive: RANDFLAKE_MAX_TIMESTAMP + 1 },
+    secret,
+    clock: () => RANDFLAKE_EPOCH_OFFSET + Math.floor(modernCalls++ / (RANDFLAKE_MAX_SEQUENCE + 1)),
+  });
+  let legacyCalls = 0;
+  const legacy = new LegacyGenerator(1, RANDFLAKE_EPOCH_OFFSET, RANDFLAKE_MAX_TIMESTAMP, secret);
+  legacy.timeSource = () => RANDFLAKE_EPOCH_OFFSET + Math.floor(legacyCalls++ / (RANDFLAKE_MAX_SEQUENCE + 1));
 
-  // Pre-create 32 generators for cascade benchmark
-  const cascadeGenerators: Generator[] = Array.from(
-    { length: 32 },
-    (_, i) => new Generator(i + 1, now - 3600, now + 3600, secret)
-  );
+  bench('v2 generate', () => {
+    generator.generate();
+  });
 
-  // Pre-create generators for high throughput benchmark
-  const throughputGenerators: Generator[] = Array.from(
-    { length: 8 },
-    (_, i) => new Generator(i + 1, now - 3600, now + 3600, secret)
-  );
-
-  let cursor = 0;
-
-  bench("generate - 32 generators cascade", () => {
-    try {
-      cascadeGenerators[cursor].generate();
-    } catch (err) {
-      cursor = (cursor + 1) % 32;
-      cascadeGenerators[cursor].generate();
-    }
+  bench('legacy generate', () => {
+    legacy.generate();
   });
 });

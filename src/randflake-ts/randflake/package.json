@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./v2": {
+      "types": "./dist/v2.d.ts",
+      "import": "./dist/v2.js"
     }
   },
   "scripts": {
@@ -18,7 +22,12 @@
     "prepublishOnly": "npm run build"
   },
   "files": [
-    "dist"
+    "dist/index.js",
+    "dist/index.d.ts",
+    "dist/core.js",
+    "dist/core.d.ts",
+    "dist/v2.js",
+    "dist/v2.d.ts"
   ],
   "dependencies": {
     "sparx64": "^1.8.0"

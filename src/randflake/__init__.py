@@ -1,6 +1,8 @@
 from .randflake import (
     Generator,
     LeaseInfo,
+    RandflakeError,
+    ErrInvalidID,
     ErrRandflakeDead,
     ErrInvalidSecret,
     ErrInvalidLease,
@@ -19,6 +21,8 @@ __all__ = [
     # Randflake
     "Generator",
     "LeaseInfo",
+    "RandflakeError",
+    "ErrInvalidID",
     "ErrRandflakeDead",
     "ErrInvalidSecret",
     "ErrInvalidLease",

@@ -174,5 +174,27 @@
     "raw_id": "9223372036854775807",
     "encrypted_id": "-6720148258825199276",
     "encoded_id": "a5f9sodpc78ak"
+  },
+  {
+    "secret": "00000000000000000000000000000000",
+    "node_id": 0,
+    "lease_start": 2266870912,
+    "lease_end": 2266870912,
+    "timestamp": 2266870912,
+    "sequence": 0,
+    "raw_id": "9223372036854775808",
+    "encrypted_id": "-3982597608054324766",
+    "encoded_id": "chenoie09k0f2"
+  },
+  {
+    "secret": "ffffffffffffffffffffffffffffffff",
+    "node_id": 131071,
+    "lease_start": 2803741823,
+    "lease_end": 2803741823,
+    "timestamp": 2803741823,
+    "sequence": 0,
+    "raw_id": "18446744073709420544",
+    "encrypted_id": "1989838421133523106",
+    "encoded_id": "1n7ajg1e1cu52"
   }
 ]
