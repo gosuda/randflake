@@ -89,3 +89,41 @@ jobs:
       - name: Verify randflake JSR package
         working-directory: src/randflake-ts/randflake
         run: npx --no-install jsr publish --dry-run
+
+  release-diagnostics:
+    name: Read v2.1.0 npm failure
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    steps:
+      - name: Report sanitized npm failure categories
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          log=$(mktemp)
+          trap 'rm -f -- "$log"' EXIT
+          gh api "repos/$GITHUB_REPOSITORY/actions/jobs/102300000507/logs" > "$log"
+          python3 - "$log" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          text = Path(sys.argv[1]).read_text(errors="replace")
+          codes = sorted(set(re.findall(r"npm (?:error|ERR!) code ([A-Z][A-Z0-9_]*)", text)))
+          lower = text.lower()
+          signals = {
+              "TOKEN_EXPIRED_OR_REVOKED": "expired or revoked" in lower,
+              "TWO_FACTOR_OR_BYPASS_TOKEN_REQUIRED": "two-factor authentication" in lower,
+              "LOGIN_REQUIRED": "need auth" in lower or "authorize this machine" in lower,
+              "PACKAGE_CONTENT_MISMATCH": "different package contents" in lower,
+          }
+          categories = codes + [name for name, found in signals.items() if found]
+          categories += ["REGISTRY_HTTP_" + code for code in re.findall(r"registry HTTP (\d{3})", text)]
+          if not categories:
+              categories = ["UNCLASSIFIED_NPM_FAILURE"]
+          for category in categories:
+              print(f"::notice title=Release diagnostic::{category}")
+          PY
