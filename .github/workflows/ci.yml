@@ -9,10 +9,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   go:
     name: Go
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -27,7 +31,7 @@ jobs:
 
   python:
     name: Python
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -45,7 +49,7 @@ jobs:
 
   typescript:
     name: TypeScript
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -63,24 +67,6 @@ jobs:
 
       - name: Test TypeScript
         run: npm test
-
-  jsr:
-    name: JSR dry run
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-
-      - name: Install TypeScript dependencies
-        run: bash .github/scripts/npm-ci-with-logs.sh
-
-      - name: Build workspace dependency
-        run: npm run build --workspace sparx64
 
       - name: Verify sparx64 JSR package
         working-directory: src/randflake-ts/sparx64

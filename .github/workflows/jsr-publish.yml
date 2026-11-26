@@ -1,8 +1,6 @@
 name: JSR Package Publish
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
   workflow_call:
 
@@ -17,7 +15,7 @@ concurrency:
 jobs:
   publish-jsr:
     name: Publish JSR packages
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v6

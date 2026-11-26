@@ -1,8 +1,6 @@
 name: Node.js Package Publish NPM
 
 on:
-  release:
-    types: [created]
   workflow_call:
     secrets:
       npm_token:
@@ -17,7 +15,7 @@ concurrency:
 
 jobs:
   publish-npm:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
