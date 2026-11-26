@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - 'v2.[0-9]+.[0-9]+'
-  release:
-    types: [published]
 
 permissions:
   contents: read
@@ -18,7 +16,7 @@ jobs:
   verify:
     name: Verify release
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     env:
       RELEASE_TAG: ${{ github.ref_name }}
       GOTOOLCHAIN: local
@@ -112,7 +110,7 @@ jobs:
     name: Build Python package
     needs: verify
     if: ${{ !cancelled() && (needs.verify.result == 'success' || (github.event_name == 'release' && needs.verify.result == 'skipped')) }}
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
 
@@ -144,7 +142,7 @@ jobs:
     name: Publish Python package
     needs: release-build
     if: ${{ !cancelled() && needs.release-build.result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     permissions:
       id-token: write
     environment:
@@ -176,7 +174,7 @@ jobs:
     name: Publish GitHub Release
     if: github.event_name == 'push'
     needs: [npm, pypi-publish, jsr]
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     permissions:
       contents: write
     steps:
